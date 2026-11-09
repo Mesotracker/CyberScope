@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Neon City Shooter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/PointerLockControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Inter', sans-serif; }
+        canvas { display: block; }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #E0E; /* Neon Pink */
+            text-shadow: 0 0 10px #E0E, 0 0 20px #80F;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #instructions {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px 40px;
+            border-radius: 12px;
+            border: 4px solid #F0F;
+            box-shadow: 0 0 30px #F0F;
+            text-align: center;
+            pointer-events: auto;
+        }
+        #score {
+            font-size: 2.5rem;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #F80; /* Neon Orange */
+        }
+        #health {
+            font-size: 2.5rem;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #F00; /* Neon Red */
+            text-shadow: 0 0 10px #F00;
+        }
+        #crosshair {
+            width: 10px;
+            height: 10px;
+            border: 2px solid #0F0; /* Neon Green */
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            display: none; /* Hide until lock is attempted */
+        }
+        #gameOver {
+            display: none;
+            text-align: center;
+            background: rgba(128, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 12px;
+            border: 5px solid #F00;
+            box-shadow: 0 0 50px #F00;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div id="overlay">
+    <div id="instructions">
+        <h1 class="text-4xl font-bold mb-4">3D Neon City Shooter</h1>
+        <p class="text-xl mb-6">Welcome to Neo-Miami! Click to start and lock controls.</p>
+        <button id="startButton" class="px-6 py-3 text-white bg-purple-600 rounded-lg shadow-lg hover:bg-purple-700 transition duration-150">
+            Enter the Grid (Click Here)
+        </button>
+        <p class="mt-4 text-sm text-gray-300">Goal: Pop balloons and destroy the Hunter Cubes!</p>
+    </div>
+    <div id="gameOver">
+        <h2 class="text-5xl font-bold text-red-500 mb-4">GAME OVER</h2>
+        <p class="text-2xl text-white mb-6">You were taken down by the Hunter Cubes.</p>
+        <p id="finalScore" class="text-3xl text-yellow-400">Final Score: 0</p>
+        <button id="restartButton" onclick="window.location.reload()" class="mt-6 px-6 py-3 text-white bg-green-600 rounded-lg shadow-lg hover:bg-green-700 transition duration-150">
+            Restart
+        </button>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="hidden fixed inset-0 z-20 flex items-center justify-center bg-black bg-opacity-80">
+    <div class="bg-gray-900 p-8 rounded-xl border-4 border-cyan-400 shadow-xl" style="box-shadow: 0 0 40px #0FF;">
+        <h2 class="text-3xl font-bold text-cyan-400 mb-6 border-b border-cyan-400 pb-2">Audio Settings</h2>
+        
+        <!-- MANUAL START BUTTON / STATUS -->
+        <button id="startAudioButton" class="w-full px-4 py-3 mb-4 text-white bg-green-600 rounded-lg hover:bg-green-700 transition duration-150">
+            Click to Enable Sound / Test Engine
+        </button>
+        <p id="audioStatus" class="text-center text-sm mb-4 text-red-400">Status: Audio Engine is Dormant</p>
+        
+        <!-- Music Toggle -->
+        <div class="flex justify-between items-center mb-4">
+            <span class="text-xl text-white">City Ambience Music</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="musicToggle" class="sr-only peer" checked>
+                <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+            </label>
+        </div>
+
+        <!-- SFX Toggle -->
+        <div class="flex justify-between items-center mb-6">
+            <span class="text-xl text-white">Sound Effects (Shots, Pops, Steps)</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="sfxToggle" class="sr-only peer" checked>
+                <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+            </label>
+        </div>
+        
+        <!-- FPS Display - New Element -->
+        <p id="fpsDisplay" class="text-center text-xl mt-4 text-yellow-400">FPS: Calculating...</p>
+
+        <button id="closeSettings" class="w-full px-4 py-2 mt-4 text-white bg-red-600 rounded-lg hover:bg-red-700 transition duration-150">
+            Close
+        </button>
+    </div>
+</div>
+
+<!-- Permanent Settings button outside the overlay -->
+<button id="openSettings" class="absolute top-4 left-4 z-10 p-3 bg-indigo-700 text-white rounded-full shadow-lg hover:bg-indigo-600 transition duration-150">
+    <!-- Icon: Gear (Cog) from Lucide -->
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18A2 2 0 0 1 9.76 6.13l-.55 1.1a2 2 0 0 0-.67 1.83l.35 1.74A2 2 0 0 1 8.27 12a2 2 0 0 0 0 1.25 2 2 0 0 1-.76 1.93l-.35 1.74a2 2 0 0 0 .67 1.83l.55 1.1a2 2 0 0 1 2 2v.18a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1.95-1.95l.55-1.1a2 2 0 0 0 .67-1.83l-.35-1.74a2 2 0 0 1 .76-1.93 2 2 0 0 0 0-1.25 2 2 0 0 1 .76-1.93l.35-1.74a2 2 0 0 0-.67-1.83l-.55-1.1a2 2 0 0 1-1.95-1.95V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+</button>
+
+<div id="health">Health: 100</div>
+<div id="score">Score: 0</div>
+<div id="crosshair"></div>
+<!-- Note: Controls Info is hidden by the instructions/overlay initially -->
+
+<script>
+    // --- Global Setup ---
+    let camera, scene, renderer, controls;
+    let raycaster;
+    let score = 0;
+    let playerHealth = 100; 
+    let isGameOver = false;
+
+    // Movement state
+    let moveForward = false;
+    let moveBackward = false;
+    let moveLeft = false;
+    let moveRight = false;
+    let velocity = new THREE.Vector3();
+    let direction = new THREE.Vector3();
+    let prevTime = performance.now();
+    let forwardDirection = new THREE.Vector3(); 
+
+    // City Parameters
+    const BALLOON_COUNT = 60; 
+    const ENEMY_COUNT = 10;
+    const HEART_COUNT = 10; 
+    const HEAL_AMOUNT = 50; 
+    const CITY_SIZE = 1000; 
+    const MIN_X = -CITY_SIZE / 2;
+    const MAX_X = CITY_SIZE / 2;
+    const MIN_Z = -CITY_SIZE / 2;
+    const MAX_Z = CITY_SIZE / 2;
+    const BUILDINGS = []; 
+    // New structure: stores {mesh: Mesh, box: Box3}
+    let BUILDING_COLLISION_VOLUMES = []; 
+    const BALLOONS = [];
+    const ENEMIES = []; 
+    const HEARTS = []; 
+    const ENEMY_SHOTS = []; 
+    
+    // Collision parameter: Distance player must be from a building to stop movement
+    const BUILDING_COLLISION_DISTANCE = 15; 
+    
+    // Time control parameters
+    let timeScale = 1.0; 
+    const NORMAL_MOVEMENT_DAMPING = 20.0;
+    const NORMAL_MOVEMENT_ACCEL = 600.0;
+    const ENEMY_SHOT_SPEED = 150;
+    const ENEMY_SHOOT_COOLDOWN = 2.0; // Seconds between shots
+
+    // --- Audio Variables ---
+    let drone;
+    let melodySynth, bassSynth, leadSequence, bassSequence;
+    let popSynth, shootSynth, footstepSynth, enemyShotSynth, playerHitSynth, healSynth; 
+    let isMusicEnabled = true; 
+    let isSFXEnabled = true;   
+    let footstepTimer = 0;
+    const FOOTSTEP_INTERVAL = 0.3;
+    
+    // Time Check for Audio Fix (only start if context is not running)
+    let isAudioInitialized = false; 
+    
+    // Time Check for FPS
+    let fpsCounter = 0;
+    let fpsLastUpdate = performance.now();
+    
+    // UI Elements
+    let healthEl, scoreEl, fpsDisplayEl;
+
+
+    /**
+     * Updates the visible status of the Audio Engine in the settings modal.
+     */
+    function updateAudioStatus(state) {
+        const statusEl = document.getElementById('audioStatus');
+        const startButtonEl = document.getElementById('startAudioButton');
+        
+        if (!statusEl || !startButtonEl) return;
+
+        if (state === 'running') {
+            statusEl.textContent = 'Status: Audio Engine Running! (Music is ON/OFF)';
+            statusEl.classList.remove('text-red-400');
+            statusEl.classList.add('text-green-400');
+            startButtonEl.textContent = 'Audio Engine Active (Click to Test Shoot SFX)';
+            startButtonEl.onclick = playShootSFX; 
+        } else {
+            statusEl.textContent = 'Status: Audio Engine is Dormant (Requires a user click)';
+            statusEl.classList.add('text-red-400');
+            statusEl.classList.remove('text-green-400'); 
+            startButtonEl.textContent = 'Click to Enable Sound / Test Engine';
+            // Use an anonymous function to ensure startAudioContext doesn't try to lock controls
+            startButtonEl.onclick = () => startAudioContext(false); 
+        }
+    }
+    
+    /**
+     * CRITICAL: Initializes all Tone.js instruments and loops. Called only ONCE on init().
+     */
+    function initializeToneInstruments() {
+        if (isAudioInitialized) return; 
+        console.log("Audio: Initializing Tone Instruments...");
+        
+        // --- MUSIC SETUP ---
+        Tone.Transport.bpm.value = 120; // Set the tempo
+
+        // 1. Low-Frequency Rumble (Drone)
+        drone = new Tone.NoiseSynth({
+            noise: { type: 'brown' },
+            envelope: { attack: 0.1, decay: 4, sustain: 1, release: 4 }
+        });
+        const droneReverb = new Tone.Reverb({ decay: 5, preDelay: 0.5 }).toDestination();
+        drone.connect(droneReverb);
+        drone.volume.value = -15;
+
+        // 2. Neon Melody Synth (Arp sound)
+        melodySynth = new Tone.PolySynth(Tone.AMSynth).toDestination();
+        melodySynth.set({
+            oscillator: { type: "triangle" },
+            envelope: { attack: 0.005, decay: 0.2, sustain: 0.1, release: 0.8 },
+            volume: -10
+        });
+
+        // 3. Deep Bass Synth (Simple Mono)
+        bassSynth = new Tone.Synth({
+            oscillator: { type: "square" },
+            envelope: { attack: 0.01, decay: 0.1, sustain: 0.9, release: 0.5 }
+        }).toDestination();
+        bassSynth.volume.value = -12;
+
+        // --- SEQUENCERS (MIDI-style Music) ---
+        const bassLine = ["C2", null, "G2", null, "A#2", null, "G2", null];
+        bassSequence = new Tone.Sequence((time, note) => {
+            if (note) {
+                bassSynth.triggerAttackRelease(note, "8n", time);
+            }
+        }, bassLine, "4n").start(0);
+
+        const melodyPattern = [
+            "C4", null, "D#4", null, "G4", null, "F4", null, 
+            "D#4", null, "C4", null, "A#3", null, "C4", null 
+        ];
+
+        leadSequence = new Tone.Sequence((time, note) => {
+            if (note) {
+                let playedNote = note;
+                if (Math.random() < 0.1) {
+                    playedNote = Tone.Midi(note).transpose(12).toNote(); 
+                } else if (Math.random() < 0.1) {
+                    playedNote = Tone.Midi(note).transpose(-12).toNote(); 
+                }
+
+                melodySynth.triggerAttackRelease(playedNote, "16n", time);
+            }
+        }, melodyPattern, "8n").start(0);
+
+
+        // --- SFX SETUP ---
+        
+        // 4. Pop Sound
+        popSynth = new Tone.NoiseSynth({
+            noise: { type: 'pink' },
+            envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
+        }).toDestination();
+        popSynth.volume.value = -8;
+
+        // 5. Player Shoot Sound (Neon Cyan)
+        shootSynth = new Tone.MembraneSynth({
+            envelope: { attack: 0.002, decay: 0.05, sustain: 0.01, release: 0.1 }
+        }).toDestination();
+        shootSynth.volume.value = -12;
+
+        // 6. Footstep Sound
+        footstepSynth = new Tone.Synth({
+            oscillator: { type: "square" },
+            envelope: { attack: 0.001, decay: 0.02, sustain: 0, release: 0.05 }
+        }).toDestination();
+        footstepSynth.volume.value = -18;
+        
+        // 7. Enemy Shot (Laser) Sound (New)
+        enemyShotSynth = new Tone.Synth({
+            oscillator: { type: "sawtooth" },
+            envelope: { attack: 0.005, decay: 0.1, sustain: 0.05, release: 0.1 }
+        }).toDestination();
+        enemyShotSynth.volume.value = -10;
+
+        // 8. Player Hit Sound (New)
+        playerHitSynth = new Tone.NoiseSynth({
+            noise: { type: 'white' },
+            envelope: { attack: 0.001, decay: 0.3, sustain: 0.0, release: 0.1 }
+        }).toDestination();
+        playerHitSynth.volume.value = -5;
+        
+        // 9. Heal Pickup Sound (NEW)
+        healSynth = new Tone.MembraneSynth({
+            pitchDecay: 0.008,
+            octaves: 2,
+            envelope: {
+                attack: 0.001,
+                decay: 0.4,
+                sustain: 0.0,
+                release: 0.1
+            }
+        }).toDestination();
+        healSynth.volume.value = -8;
+
+
+        Tone.Transport.pause(); 
+        isAudioInitialized = true;
+    }
+
+    /**
+     * Attempts to start the AudioContext. MUST be called from a user-initiated event.
+     * @param {boolean} requestLock - Whether to request pointer lock immediately after starting audio.
+     */
+    async function startAudioContext(requestLock = true) {
+        if (!isAudioInitialized) {
+            console.error("Audio: Instruments not yet initialized.");
+            return false;
+        }
+
+        if (Tone.context.state !== 'running') {
+            console.log("Audio: Attempting to start/resume AudioContext...");
+            try {
+                await Tone.start();
+                console.log("Audio: Tone.js AudioContext started/resumed.");
+            } catch(e) {
+                console.error("Audio: Failed to start Tone.js AudioContext:", e);
+                updateAudioStatus('suspended');
+                return false;
+            }
+        }
+        
+        if (isMusicEnabled) {
+            toggleMusic(true);
+        }
+        
+        updateAudioStatus('running');
+        
+        // Only request lock if explicitly asked to, usually only on the main start button click.
+        if (requestLock) {
+             controls.lock();
+        }
+        
+        return true;
+    }
+
+    /**
+     * Toggles the main music loop (Drone and Sequences) on/off.
+     */
+    function toggleMusic(enable) {
+        // We only attempt to start music if the audio context is already running.
+        if (!isAudioInitialized || Tone.context.state !== 'running') {
+            isMusicEnabled = enable;
+            return; 
+        }
+
+        if (enable) {
+            Tone.Transport.start(); 
+            drone.triggerAttack();
+        } else {
+            drone.triggerRelease();
+            Tone.Transport.pause(); 
+        }
+        isMusicEnabled = enable;
+    }
+
+    /**
+     * Toggles the master SFX control.
+     */
+    function toggleSFX(enable) {
+        isSFXEnabled = enable;
+    }
+
+    // --- SFX Playback Functions ---
+
+    function playPopSFX() {
+        if (isSFXEnabled && Tone.context.state === 'running') {
+            popSynth.triggerAttackRelease("16n");
+        }
+    }
+
+    function playShootSFX() {
+        if (isSFXEnabled && Tone.context.state === 'running') {
+            shootSynth.triggerAttackRelease("C1", "64n");
+        }
+    }
+    
+    function playEnemyShotSFX() {
+        if (isSFXEnabled && Tone.context.state === 'running') {
+            enemyShotSynth.triggerAttackRelease("E4", "16n");
+        }
+    }
+    
+    function playPlayerHitSFX() {
+        if (isSFXEnabled && Tone.context.state === 'running') {
+            playerHitSynth.triggerAttackRelease("8n");
+        }
+    }
+
+    function playHealSFX() {
+        if (isSFXEnabled && Tone.context.state === 'running') {
+            healSynth.triggerAttackRelease("C5", "8n");
+        }
+    }
+
+    function playFootstepSFX() {
+        if (isSFXEnabled && Tone.context.state === 'running') {
+            const note = (Math.random() > 0.5) ? "C0" : "D#0"; 
+            footstepSynth.triggerAttackRelease(note, "32n"); 
+        }
+    }
+
+
+    // --- City Element Generation Functions ---
+
+    /**
+     * Creates a single wireframe building with window grids and an invisible collision mesh.
+     */
+    function createBuilding(x, z, sizeX, sizeZ, height, hue) {
+        const buildingGroup = new THREE.Group();
+        
+        const color = new THREE.Color().setHSL(hue, 1.0, 0.5);
+        const material = new THREE.LineBasicMaterial({
+            color: color,
+            linewidth: 2, 
+        });
+
+        // 1. Wireframe Edges (Visual)
+        const geometry = new THREE.BoxGeometry(sizeX, height, sizeZ);
+        const edges = new THREE.EdgesGeometry(geometry);
+        const lineMesh = new THREE.LineSegments(edges, material);
+        lineMesh.userData.type = 'building_visual'; 
+        lineMesh.position.y = height / 2;
+        buildingGroup.add(lineMesh);
+
+        // 2. Collision Mesh (Invisible Box for reliable player and shot collision)
+        const collisionGeo = new THREE.BoxGeometry(sizeX, height, sizeZ);
+        const collisionMat = new THREE.MeshBasicMaterial({ 
+            visible: false, 
+            depthWrite: false 
+        }); 
+        const collisionMesh = new THREE.Mesh(collisionGeo, collisionMat);
+        collisionMesh.userData.type = 'collision_volume'; 
+        collisionMesh.position.y = height / 2;
+        collisionMesh.position.set(x, height/2, z); // Set position to the center of the box
+        
+        scene.add(collisionMesh);
+        
+        // Store collision data: mesh for raycasting, and Box3 for BB collision
+        const collisionVolumeData = {
+            mesh: collisionMesh,
+            box: new THREE.Box3().setFromObject(collisionMesh)
+        };
+        
+        BUILDING_COLLISION_VOLUMES.push(collisionVolumeData); 
+        
+        // 3. Window Grid Generation (Lines)
+        const vertices = [];
+        const windowColsX = Math.floor(sizeX / 10);
+        const windowColsZ = Math.floor(sizeZ / 10);
+        const windowRows = Math.floor(height / 10) - 1; 
+        
+        for (let i = 1; i < windowColsX; i++) {
+            const xOffset = (i / windowColsX) * sizeX - (sizeX / 2);
+            vertices.push(xOffset, 0, -sizeZ / 2, xOffset, height, -sizeZ / 2); 
+            vertices.push(xOffset, 0, sizeZ / 2, xOffset, height, sizeZ / 2);
+        }
+        for (let i = 1; i < windowColsZ; i++) {
+            const zOffset = (i / windowColsZ) * sizeZ - (sizeZ / 2);
+            vertices.push(sizeX / 2, 0, zOffset, sizeX / 2, height, zOffset);
+            vertices.push(-sizeX / 2, 0, zOffset, -sizeX / 2, height, zOffset);
+        }
+        for (let j = 1; j <= windowRows; j++) {
+            const yOffset = (j / (windowRows + 1)) * height;
+            vertices.push(-sizeX / 2, yOffset, -sizeZ / 2, sizeX / 2, yOffset, -sizeZ / 2); 
+            vertices.push(-sizeX / 2, yOffset, sizeZ / 2, sizeX / 2, yOffset, sizeZ / 2);   
+            vertices.push(sizeX / 2, yOffset, -sizeZ / 2, sizeX / 2, yOffset, sizeZ / 2);   
+            vertices.push(-sizeX / 2, yOffset, -sizeZ / 2, -sizeX / 2, yOffset, sizeZ / 2); 
+        }
+
+        const windowGeometry = new THREE.BufferGeometry();
+        windowGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const windowMesh = new THREE.LineSegments(windowGeometry, material);
+        buildingGroup.add(windowMesh);
+        
+        buildingGroup.position.set(x, 0, z); 
+        
+        scene.add(buildingGroup);
+        BUILDINGS.push(buildingGroup);
+    }
+    
+    function createStarfield() {
+        const starGeometry = new THREE.BufferGeometry();
+        const starVertices = [];
+        const STAR_COUNT = 5000;
+        const STAR_RADIUS = CITY_SIZE; 
+
+        for (let i = 0; i < STAR_COUNT; i++) {
+            const x = (Math.random() - 0.5) * STAR_RADIUS * 2;
+            const y = (Math.random() - 0.5) * STAR_RADIUS * 2;
+            const z = (Math.random() - 0.5) * STAR_RADIUS * 2;
+            starVertices.push(x, y, z);
+        }
+
+        starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+        
+        const starMaterial = new THREE.PointsMaterial({
+            color: 0xFFFFFF,
+            size: 1,
+            sizeAttenuation: true,
+            transparent: true,
+            opacity: 0.8
+        });
+
+        const starfield = new THREE.Points(starGeometry, starMaterial);
+        scene.add(starfield);
+    }
+
+
+    function createCityElements() {
+        // --- 1. Ground and Grid ---
+        const groundGeo = new THREE.PlaneGeometry(CITY_SIZE, CITY_SIZE);
+        const groundMat = new THREE.MeshBasicMaterial({ 
+            color: 0x000011, 
+            side: THREE.DoubleSide 
+        });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        const gridHelper = new THREE.GridHelper(CITY_SIZE, 50, 0xAA00FF, 0x00FFFF); 
+        gridHelper.position.y = 0.1;
+        scene.add(gridHelper);
+
+        // --- 2. Skyscrapers ---
+        for (let i = 0; i < 100; i++) { 
+            const x = Math.random() * (CITY_SIZE * 0.9) - (CITY_SIZE * 0.45); 
+            const z = Math.random() * (CITY_SIZE * 0.9) - (CITY_SIZE * 0.45); 
+            
+            const sizeX = 25 + Math.random() * 35; 
+            const sizeZ = 25 + Math.random() * 35; 
+            
+            const height = 50 + Math.random() * 200; 
+            const hue = Math.random() * 0.5 + 0.5; 
+            createBuilding(x, z, sizeX, sizeZ, height, hue);
+        }
+        
+    }
+
+    function createBalloon() {
+        const color = new THREE.Color().setHSL(Math.random(), 1.0, 0.7);
+        const mat = new THREE.MeshPhongMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 0.5,
+            specular: 0xffffff,
+            shininess: 80,
+            transparent: true,
+            opacity: 0.8
+        });
+
+        const geo = new THREE.SphereGeometry(10, 16, 16); 
+        const balloon = new THREE.Mesh(geo, mat);
+        balloon.userData.type = 'balloon'; 
+
+        const initialX = Math.random() * CITY_SIZE - CITY_SIZE / 2; 
+        const initialY = 30 + Math.random() * 50; 
+        const initialZ = Math.random() * CITY_SIZE - CITY_SIZE / 2;
+
+        balloon.position.set(initialX, initialY, initialZ);
+        
+        balloon.userData.initialPosition = new THREE.Vector3(initialX, initialY, initialZ);
+        balloon.userData.oscillationSpeed = 0.5 + Math.random() * 0.5; 
+        balloon.userData.floatSpeed = 0.05 + Math.random() * 0.1; 
+        balloon.userData.oscillationRange = 5 + Math.random() * 5;
+
+        scene.add(balloon);
+        BALLOONS.push(balloon);
+    }
+    
+    /**
+     * Creates a rotating neon pink health pickup cross.
+     */
+    function createHealthHeart() {
+        const HEART_SIZE = 5;
+        const color = 0xFF00FF; // Neon Pink
+
+        const mat = new THREE.MeshPhongMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 1.5,
+            wireframe: true 
+        });
+        
+        // Create the geometry for the plus sign/cross shape
+        const horizontalGeo = new THREE.BoxGeometry(HEART_SIZE * 2.5, HEART_SIZE / 2, HEART_SIZE / 2);
+        const verticalGeo = new THREE.BoxGeometry(HEART_SIZE / 2, HEART_SIZE * 2.5, HEART_SIZE / 2);
+        
+        // Use a Group to combine and rotate the parts
+        const heartGroup = new THREE.Group();
+        
+        const horizontalBar = new THREE.Mesh(horizontalGeo, mat);
+        const verticalBar = new THREE.Mesh(verticalGeo, mat);
+        
+        // Combine them into a single object for rotation
+        heartGroup.add(horizontalBar);
+        heartGroup.add(verticalBar);
+        
+        heartGroup.userData.type = 'health_pickup';
+        
+        // Position randomly
+        const initialX = Math.random() * CITY_SIZE - CITY_SIZE / 2;
+        const initialZ = Math.random() * CITY_SIZE - CITY_SIZE / 2;
+        const initialY = 10; // Float slightly above ground
+
+        heartGroup.position.set(initialX, initialY, initialZ);
+        
+        // Add movement properties
+        heartGroup.userData.rotationSpeed = 1 + Math.random(); 
+        heartGroup.userData.oscillationSpeed = 0.5 + Math.random() * 0.5;
+        heartGroup.userData.initialPosition = new THREE.Vector3(initialX, initialY, initialZ);
+
+        scene.add(heartGroup);
+        HEARTS.push(heartGroup);
+    }
+    
+    /**
+     * Creates a blocky, Minecraft-style enemy cube.
+     */
+    function createEnemy() {
+        const geo = new THREE.BoxGeometry(10, 10, 10);
+        const mat = new THREE.MeshPhongMaterial({
+            color: 0xFF0000,
+            emissive: 0xFF0000,
+            emissiveIntensity: 1.5,
+            specular: 0xFFFFFF,
+            shininess: 100
+        });
+        
+        const enemy = new THREE.Mesh(geo, mat);
+        enemy.userData.type = 'enemy';
+        enemy.userData.speed = 40 + Math.random() * 20; // Enemy move speed
+        enemy.userData.shootCooldown = ENEMY_SHOOT_COOLDOWN + Math.random() * 1.5; // Randomize shooting
+        enemy.userData.shootTimer = Math.random() * ENEMY_SHOOT_COOLDOWN; // Start timer randomly
+        enemy.userData.health = 1; 
+        
+        // Bounding box objects for geometry collision checks (NEW)
+        enemy.userData.boundingBox = new THREE.Box3(); 
+        enemy.userData.tempBox = new THREE.Box3(); 
+
+        // Spawn far away from the center
+        const spawnDistance = CITY_SIZE / 2 * 0.8;
+        enemy.position.x = (Math.random() - 0.5) * spawnDistance * 2;
+        enemy.position.z = (Math.random() - 0.5) * spawnDistance * 2;
+        enemy.position.y = 5; // Stand on the ground
+
+        scene.add(enemy);
+        ENEMIES.push(enemy);
+    }
+    
+    /**
+     * Creates an enemy laser beam.
+     */
+    function createEnemyShot(origin, direction) {
+        const geo = new THREE.CylinderGeometry(0.5, 0.5, 20, 8);
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0xFF0000,
+            emissive: 0xFF0000,
+            emissiveIntensity: 2
+        });
+        
+        const shot = new THREE.Mesh(geo, mat);
+        shot.userData.type = 'enemy_shot';
+        
+        // Position and orient the shot
+        shot.position.copy(origin);
+        shot.position.y += 5; // Center it on the enemy cube
+        
+        // Align rotation with direction vector
+        const up = new THREE.Vector3(0, 1, 0);
+        const axis = new THREE.Vector3().crossVectors(up, direction).normalize();
+        const radians = Math.acos(up.dot(direction));
+        shot.quaternion.setFromAxisAngle(axis, radians);
+        
+        // Store velocity/direction
+        shot.userData.velocity = direction.normalize().multiplyScalar(ENEMY_SHOT_SPEED);
+
+        scene.add(shot);
+        ENEMY_SHOTS.push(shot);
+        
+        playEnemyShotSFX(); 
+    }
+    
+    function init() {
+        // --- 1. Audio Instrument Setup (Instruments created, but context is dormant) ---
+        initializeToneInstruments();
+        
+        // --- 2. Three.js Setup ---
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+        scene.fog = new THREE.FogExp2(0x0a0020, 0.001); 
+
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 2000); 
+        camera.position.y = 10;
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
+        scene.add(ambientLight);
+
+        // Create the environment 
+        createStarfield(); 
+        createCityElements();
+
+        // Create initial balloons
+        for (let i = 0; i < BALLOON_COUNT; i++) {
+            createBalloon();
+        }
+        
+        // Create enemies
+        for (let i = 0; i < ENEMY_COUNT; i++) {
+            createEnemy();
+        }
+        
+        // Create health hearts
+        for (let i = 0; i < HEART_COUNT; i++) {
+            createHealthHeart();
+        }
+
+
+        // --- 3. Controls and UI Bindings ---
+        controls = new THREE.PointerLockControls(camera, document.body);
+
+        const instructions = document.getElementById('instructions');
+        const startButton = document.getElementById('startButton');
+        const startAudioButton = document.getElementById('startAudioButton'); 
+        healthEl = document.getElementById('health');
+        scoreEl = document.getElementById('score');
+
+        // *** FIX for Black Screen: Hide instructions IMMEDIATELY on click ***
+        startButton.addEventListener('click', async () => {
+            // 1. Visually start the game immediately (hides the black screen overlay)
+            instructions.style.display = 'none';
+            document.getElementById('openSettings').style.display = 'none';
+            document.getElementById('crosshair').style.display = 'block';
+
+            // 2. Attempt to start audio and lock controls
+            await startAudioContext(true); 
+        }, false);
+        
+        // Settings modal audio button logic:
+        startAudioButton.addEventListener('click', async () => {
+            if (Tone.context.state !== 'running') {
+                // Start audio without requesting lock
+                await startAudioContext(false);
+            } else {
+                playShootSFX();
+            }
+        });
+        
+        // Error handler (optional, but good practice)
+        controls.addEventListener('error', function (event) {
+             console.error("PointerLockControls error:", event);
+             // If the lock failed, the unlock event usually follows or we let the user press ESC.
+        });
+
+        // Lock Event: Used for state confirmation (UI is already handled by the button click)
+        controls.addEventListener('lock', function () {
+            // Ensure any game-over state is cleared visually if the user re-locks
+            document.getElementById('gameOver').style.display = 'none'; 
+        });
+
+        // Unlock Event: Always shows the instructions/menu when lock is lost (ESC or failure)
+        controls.addEventListener('unlock', function () {
+            // Only show instructions if the game is not fully over
+            if (!isGameOver) { 
+                instructions.style.display = 'flex';
+                document.getElementById('crosshair').style.display = 'none';
+                document.getElementById('openSettings').style.display = 'block';
+            }
+        });
+
+        // --- Settings Modal Logic ---
+        const settingsModal = document.getElementById('settingsModal');
+        const openSettings = document.getElementById('openSettings');
+        const closeSettings = document.getElementById('closeSettings');
+        const musicToggle = document.getElementById('musicToggle');
+        const sfxToggle = document.getElementById('sfxToggle');
+        
+        fpsDisplayEl = document.getElementById('fpsDisplay');
+
+        // Ensure settings button is visible outside of lock mode
+        document.getElementById('openSettings').style.display = 'block'; 
+
+        openSettings.addEventListener('click', () => {
+            controls.unlock();
+            settingsModal.classList.remove('hidden');
+            updateAudioStatus(Tone.context.state); 
+        });
+
+        closeSettings.addEventListener('click', () => {
+            settingsModal.classList.add('hidden');
+        });
+
+        musicToggle.addEventListener('change', (e) => {
+            toggleMusic(e.target.checked);
+        });
+
+        sfxToggle.addEventListener('change', (e) => {
+            toggleSFX(e.target.checked);
+        });
+
+        musicToggle.checked = isMusicEnabled;
+        sfxToggle.checked = isSFXEnabled;
+
+
+        // --- Event Listeners ---
+        document.addEventListener('keydown', onKeyDown, false);
+        document.addEventListener('keyup', onKeyUp, false);
+        document.addEventListener('click', onPop, false);
+        window.addEventListener('resize', onWindowResize, false);
+
+        // Initialize raycaster for collision and popping
+        raycaster = new THREE.Raycaster();
+        
+        updateAudioStatus(Tone.context.state); 
+    }
+    
+    function takeDamage(damage) {
+        if (isGameOver) return;
+        
+        playerHealth -= damage;
+        playPlayerHitSFX();
+        
+        // Visual feedback for hit
+        document.body.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
+        setTimeout(() => {
+            document.body.style.backgroundColor = '#000';
+        }, 100);
+        
+        if (playerHealth <= 0) {
+            playerHealth = 0;
+            gameOver();
+        }
+        healthEl.innerText = `Health: ${playerHealth}`;
+    }
+    
+    function gameOver() {
+        isGameOver = true;
+        controls.unlock();
+        toggleMusic(false); // Stop the music
+        
+        const instructions = document.getElementById('instructions');
+        const gameOverEl = document.getElementById('gameOver');
+        const finalScoreEl = document.getElementById('finalScore');
+        
+        instructions.style.display = 'none'; // Ensure instructions are hidden
+        document.getElementById('openSettings').style.display = 'none'; // Ensure settings button is hidden
+        gameOverEl.style.display = 'flex';
+        finalScoreEl.innerText = `Final Score: ${score}`;
+    }
+
+
+    /**
+     * Checks for collisions between the player camera and nearby buildings using raycasting.
+     */
+    function checkBuildingCollision() {
+        if (!moveForward && !moveBackward && !moveLeft && !moveRight) {
+            return;
+        }
+
+        // Get the actual mesh objects from the volumes array for raycasting
+        const meshesToCheck = BUILDING_COLLISION_VOLUMES.map(v => v.mesh); 
+
+        const rayDirections = [
+            new THREE.Vector3(0, 0, -1), // 0: Forward
+            new THREE.Vector3(0, 0, 1),  // 1: Backward
+            new THREE.Vector3(-1, 0, 0), // 2: Left
+            new THREE.Vector3(1, 0, 0)   // 3: Right
+        ];
+
+        const rotation = controls.getObject().rotation.y;
+        const matrix = new THREE.Matrix4();
+        matrix.makeRotationY(rotation);
+
+        rayDirections.forEach((directionVec, index) => {
+            const worldDirection = directionVec.clone().applyMatrix4(matrix);
+
+            raycaster.set(camera.position, worldDirection);
+            raycaster.far = BUILDING_COLLISION_DISTANCE;
+
+            const intersects = raycaster.intersectObjects(meshesToCheck, false);
+
+            if (intersects.length > 0) {
+                switch (index) {
+                    case 0: if (moveForward) direction.z = 0; break;
+                    case 1: if (moveBackward) direction.z = 0; break;
+                    case 2: if (moveLeft) direction.x = 0; break;
+                    case 3: if (moveRight) direction.x = 0; break;
+                }
+            }
+        });
+    }
+
+    // --- Event Handlers ---
+
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onKeyDown(event) {
+        if (isGameOver) return;
+        switch (event.code) {
+            case 'KeyW': moveForward = true; break;
+            case 'KeyA': moveLeft = true; break;
+            case 'KeyS': moveBackward = true; break;
+            case 'KeyD': moveRight = true; break;
+        }
+    }
+
+    function onKeyUp(event) {
+        if (isGameOver) return;
+        switch (event.code) {
+            case 'KeyW': moveForward = false; break;
+            case 'KeyA': moveLeft = false; break;
+            case 'KeyS': moveBackward = false; break;
+            case 'KeyD': moveRight = false; break;
+        }
+    }
+
+    function onPop(event) {
+        if (!controls.isLocked || isGameOver) return;
+
+        if (Tone.context.state === 'running') {
+            playShootSFX(); 
+        }
+        
+        camera.updateMatrixWorld(true);
+        camera.getWorldDirection(forwardDirection);
+        raycaster.set(camera.position, forwardDirection);
+        raycaster.far = 1000; 
+        
+        // Get the actual mesh objects from the volumes array for raycasting
+        const meshesToCheck = BUILDING_COLLISION_VOLUMES.map(v => v.mesh); 
+        
+        // Check against balloons, enemies, and buildings
+        const hittableObjects = BALLOONS.concat(ENEMIES).concat(meshesToCheck);
+        
+        const intersects = raycaster.intersectObjects(hittableObjects, false);
+
+        if (intersects.length > 0) {
+            const closestObject = intersects[0].object;
+            
+            if (closestObject.userData.type === 'balloon') {
+                const balloon = closestObject;
+                scene.remove(balloon);
+                BALLOONS.splice(BALLOONS.indexOf(balloon), 1);
+                
+                playPopSFX(); 
+                score += 10;
+                scoreEl.innerText = `Score: ${score}`;
+
+            } else if (closestObject.userData.type === 'enemy') {
+                const enemy = closestObject;
+                scene.remove(enemy);
+                ENEMIES.splice(ENEMIES.indexOf(enemy), 1);
+                
+                playPopSFX(); // Use pop sound for enemy destruction
+                score += 50;
+                scoreEl.innerText = `Score: ${score}`;
+
+            } else if (closestObject.userData.type === 'collision_volume') {
+                // Shot hit an invisible wall
+            }
+        }
+    }
+
+    // --- Game Loop and Logic ---
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        const time = performance.now();
+        const rawDelta = (time - prevTime) / 1000;
+        const delta = rawDelta * timeScale;
+        
+        if (isGameOver) {
+            renderer.render(scene, camera);
+            return;
+        }
+
+        // 1. FPS Calculation and Update
+        fpsCounter++;
+        if (time > fpsLastUpdate + 1000) {
+            const currentFPS = fpsCounter;
+            if (fpsDisplayEl) {
+                fpsDisplayEl.textContent = `FPS: ${currentFPS} ${timeScale < 1.0 ? ' (Slow)' : ''}`;
+            }
+            fpsLastUpdate = time;
+            fpsCounter = 0;
+        }
+        
+        // 2. Player Movement Update
+        if (controls.isLocked) {
+            
+            const cameraPosition = camera.position.clone();
+            const movementDamping = NORMAL_MOVEMENT_DAMPING / timeScale;
+            const movementAccel = NORMAL_MOVEMENT_ACCEL / timeScale;
+            
+            velocity.x -= velocity.x * movementDamping * rawDelta; 
+            velocity.z -= velocity.z * movementDamping * rawDelta; 
+            velocity.y = 0;
+
+            direction.z = Number(moveForward) - Number(moveBackward);
+            direction.x = Number(moveRight) - Number(moveLeft);
+            direction.normalize();
+            
+            checkBuildingCollision();
+
+            if (direction.z !== 0) velocity.z -= direction.z * movementAccel * delta; 
+            if (direction.x !== 0) velocity.x -= direction.x * movementAccel * delta; 
+
+            controls.moveRight(-velocity.x * delta);
+            controls.moveForward(-velocity.z * delta);
+
+            // Footstep logic
+            if (Tone.context.state === 'running') {
+                const isMoving = (Math.abs(velocity.x) > 0.1 || Math.abs(velocity.z) > 0.1);
+                    // Check if player is moving far enough to constitute a step
+                    if (isMoving) {
+                        footstepTimer += delta;
+                        if (footstepTimer >= FOOTSTEP_INTERVAL * (1 / timeScale)) { 
+                            playFootstepSFX();
+                            footstepTimer = 0; 
+                        }
+                    } else {
+                        footstepTimer = 0; 
+                    }
+            }
+
+
+            // Boundary check
+            camera.position.x = Math.max(MIN_X + 2, Math.min(MAX_X - 2, camera.position.x));
+            camera.position.z = Math.max(MIN_Z + 2, Math.min(MAX_Z - 2, camera.position.z));
+            camera.position.y = 10; 
+            
+            // 3. Enemy AI and Movement
+            const tempEnemyDirection = new THREE.Vector3();
+            const meshesToCheck = BUILDING_COLLISION_VOLUMES.map(v => v.mesh); 
+
+            ENEMIES.forEach(enemy => {
+                // Decrement shooting cooldown timer
+                enemy.userData.shootTimer -= rawDelta;
+
+                // Create a local raycaster for checks
+                const enemyRaycaster = new THREE.Raycaster(); 
+                
+                // Calculate desired direction towards player
+                tempEnemyDirection.subVectors(cameraPosition, enemy.position);
+                const distanceToPlayer = tempEnemyDirection.length();
+                tempEnemyDirection.normalize();
+                
+                // --- MOVEMENT COLLISION AVOIDANCE (Using Bounding Boxes) ---
+                
+                // 1. Calculate the next position
+                const movementVector = tempEnemyDirection.clone().multiplyScalar(enemy.userData.speed * delta);
+                const nextPosition = enemy.position.clone().add(movementVector);
+                
+                // 2. Create the bounding box for the next frame's position
+                enemy.userData.boundingBox.setFromObject(enemy);
+                enemy.userData.tempBox.copy(enemy.userData.boundingBox).translate(movementVector);
+                
+                let collisionDetected = false;
+                
+                // 3. Check against ALL building bounding boxes
+                for (const volumeData of BUILDING_COLLISION_VOLUMES) {
+                    if (enemy.userData.tempBox.intersectsBox(volumeData.box)) {
+                        collisionDetected = true;
+                        break;
+                    }
+                }
+
+                if (collisionDetected) {
+                    // Collision detected! Stop and turn sharply.
+                    const turnAngle = Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2; // 90-degree turn
+                    tempEnemyDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), turnAngle);
+                    
+                    // Move a small distance in the new direction to get out of the collision zone
+                    enemy.position.add(tempEnemyDirection.clone().multiplyScalar(10 * delta));
+                    
+                } else {
+                    // No collision, apply movement to the calculated next position
+                    enemy.position.copy(nextPosition);
+                }
+                
+                // Keep enemy at ground level
+                enemy.position.y = 5; 
+                
+                // Make the cube face the player 
+                enemy.lookAt(cameraPosition.x, enemy.position.y, cameraPosition.z);
+
+
+                // --- SHOOTING LINE-OF-SIGHT CHECK ---
+                
+                if (distanceToPlayer < 400 && enemy.userData.shootTimer <= 0) {
+                    
+                    const shotOrigin = enemy.position.clone();
+                    shotOrigin.y = 5; // Aim from center of enemy cube
+                    
+                    // Recalculate shot direction (since tempEnemyDirection might have been turned for movement)
+                    const shotDirection = cameraPosition.clone().sub(shotOrigin).normalize();
+                    
+                    // Set raycaster from the enemy's position in the direction of the player
+                    enemyRaycaster.set(shotOrigin, shotDirection);
+                    
+                    // Intersect with building collision meshes
+                    const losIntersects = enemyRaycaster.intersectObjects(meshesToCheck, false);
+
+                    let clearShot = true;
+                    if (losIntersects.length > 0) {
+                        // Is the intersection closer than the player?
+                        if (losIntersects[0].distance < distanceToPlayer) {
+                            clearShot = false; // Building is blocking the shot
+                        }
+                    }
+
+                    if (clearShot) {
+                        createEnemyShot(shotOrigin, shotDirection);
+                        // Reset timer, adding randomness
+                        enemy.userData.shootTimer = ENEMY_SHOOT_COOLDOWN + Math.random() * 0.5; 
+                    } else {
+                        // If shot is blocked, slightly decrease cooldown to allow them to try again sooner
+                        enemy.userData.shootTimer = 0.5; 
+                    }
+                }
+            });
+            
+            // 4. Enemy Shot Movement and Player Hit Check
+            for (let i = ENEMY_SHOTS.length - 1; i >= 0; i--) {
+                const shot = ENEMY_SHOTS[i];
+                
+                // Move the shot
+                shot.position.add(shot.userData.velocity.clone().multiplyScalar(delta));
+                
+                // Check if shot hits the player (simple distance check with the camera)
+                const distanceToPlayer = shot.position.distanceTo(cameraPosition);
+                
+                if (distanceToPlayer < 10) { 
+                    takeDamage(10); // Player takes 10 damage
+                    
+                    // Remove the shot
+                    scene.remove(shot);
+                    ENEMY_SHOTS.splice(i, 1);
+                    
+                } else if (shot.position.y < 0 || Math.abs(shot.position.x) > CITY_SIZE/2 || Math.abs(shot.position.z) > CITY_SIZE/2) {
+                    // Remove the shot if it flies too far or hits the ground (miss)
+                    scene.remove(shot);
+                    ENEMY_SHOTS.splice(i, 1);
+                }
+            }
+
+
+            // 5. Balloon Movement (same as before)
+            BALLOONS.forEach((balloon) => {
+                const initial = balloon.userData.initialPosition;
+                const speed = balloon.userData.oscillationSpeed * timeScale; 
+                const range = balloon.userData.oscillationRange;
+                const floatSpeed = balloon.userData.floatSpeed * timeScale; 
+
+                const currentTime = time * 0.001;
+                balloon.position.x = initial.x + Math.sin(currentTime * speed) * range;
+                balloon.position.z = initial.z + Math.cos(currentTime * speed * 0.8) * range; 
+                balloon.position.y = initial.y + Math.sin(currentTime * floatSpeed) * 10;
+            });
+
+            
+            // 6. Health Heart Movement and Pickup Check (NEW)
+            const PICKUP_DISTANCE = 15; // Proximity to trigger pickup
+
+            for (let i = HEARTS.length - 1; i >= 0; i--) {
+                const heart = HEARTS[i];
+                
+                // Rotation
+                heart.rotation.x += heart.userData.rotationSpeed * delta * 0.5;
+                heart.rotation.y += heart.userData.rotationSpeed * delta * 0.5;
+                
+                // Simple Floating
+                const initial = heart.userData.initialPosition;
+                const speed = heart.userData.oscillationSpeed * timeScale;
+                const currentTime = time * 0.001;
+                heart.position.y = initial.y + Math.sin(currentTime * speed) * 3;
+                
+                // Check for player pickup
+                const distanceToPlayer = heart.position.distanceTo(cameraPosition);
+                
+                if (distanceToPlayer < PICKUP_DISTANCE) {
+                    // Heal the player
+                    playerHealth += HEAL_AMOUNT;
+                    if (playerHealth > 100) {
+                        playerHealth = 100;
+                    }
+                    healthEl.innerText = `Health: ${playerHealth}`;
+                    
+                    playHealSFX(); 
+                    
+                    // Remove the heart
+                    scene.remove(heart);
+                    HEARTS.splice(i, 1);
+                }
+            }
+
+
+            // 7. Element Respawn Check
+            if (BALLOONS.length < BALLOON_COUNT) {
+                if (Math.random() < 0.05 * timeScale) { 
+                    createBalloon();
+                }
+            }
+            if (ENEMIES.length < ENEMY_COUNT) {
+                 if (Math.random() < 0.005 * timeScale) { // Slower respawn for enemies
+                    createEnemy();
+                }
+            }
+            // Respawn hearts
+            if (HEARTS.length < HEART_COUNT) {
+                if (Math.random() < 0.005 * timeScale) { 
+                    createHealthHeart();
+                }
+            }
+        }
+
+        prevTime = time;
+
+        renderer.render(scene, camera);
+    }
+
+    // Initialize and start the game loop
+    window.onload = function () {
+        init();
+        animate();
+    };
+
+</script>
+</body>
+</html>
