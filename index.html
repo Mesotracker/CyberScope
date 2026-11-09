@@ -2,264 +2,905 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEON GRID STRIKE WIREFRAME</title>
-    <!-- Use a simple, mono-spaced font for a classic wireframe terminal look -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#05070d">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2305070d'/%3E%3Crect x='10' y='10' width='44' height='44' fill='none' stroke='%2327e7ff' stroke-width='4'/%3E%3Crect x='26' y='26' width='12' height='12' fill='%23ff2bd6'/%3E%3C/svg%3E">
+    <title>NEON GRID STRIKE // Cyberpunk Combat</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Courier New', monospace; background: #000; user-select: none; }
-        #canvas-container { width: 100vw; height: 100vh; }
-        
-        /* Neon UI Styles maintained for the Wireframe look */
+        :root {
+            --cyan: #27e7ff;
+            --magenta: #ff2bd6;
+            --amber: #ffb03a;
+            --red: #ff3b4e;
+            --green: #39ff9e;
+            --ice: #dff8ff;
+            --muted: #8fb8c8;
+            --panel: linear-gradient(155deg, rgba(8, 15, 24, 0.92), rgba(4, 7, 12, 0.74));
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body { height: 100%; }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #03050a;
+            color: var(--ice);
+            font-family: "Bahnschrift", "DIN Alternate", "Segoe UI", system-ui, sans-serif;
+            letter-spacing: 0.06em;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #canvas-container { position: fixed; inset: 0; }
+        #canvas-container canvas { display: block; }
+
+        /* Subtle screen treatment on top of the WebGL output. */
+        #fx-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 4;
+            pointer-events: none;
+            background:
+                repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
+                radial-gradient(ellipse at center, transparent 45%, rgba(1, 2, 6, 0.55) 100%);
+            mix-blend-mode: screen;
+            opacity: 0.55;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* HUD                                                                 */
+        /* ------------------------------------------------------------------ */
+
+        #hud {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            width: 312px;
+            z-index: 6;
+            pointer-events: none;
+        }
+
+        .hud-panel {
+            position: relative;
+            padding: 15px 18px 16px;
+            background: var(--panel);
+            border: 1px solid rgba(39, 231, 255, 0.22);
+            clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+            backdrop-filter: blur(8px);
+            box-shadow: 0 0 30px rgba(39, 231, 255, 0.08), inset 0 0 40px rgba(39, 231, 255, 0.03);
+        }
+
+        .hud-panel::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 52%;
+            height: 1px;
+            background: linear-gradient(90deg, var(--cyan), transparent);
+            opacity: 0.8;
+        }
+
+        .hud-label {
+            font-size: 10px;
+            letter-spacing: 0.34em;
+            color: #6f97a7;
+            text-transform: uppercase;
+        }
+
+        #health-container {
+            position: relative;
+            height: 12px;
+            margin: 8px 0 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(39, 231, 255, 0.22);
+            overflow: hidden;
+        }
+
+        #health-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(90deg, transparent 0 17px, rgba(3, 6, 10, 0.65) 17px 19px);
+            pointer-events: none;
+        }
+
+        #health-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--cyan), var(--green));
+            box-shadow: 0 0 18px rgba(39, 231, 255, 0.65);
+            transition: width 0.18s ease-out;
+        }
+
+        #score-container {
+            font-size: 27px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            line-height: 1;
+            color: #ffffff;
+            text-shadow: 0 0 18px rgba(255, 43, 214, 0.55);
+        }
+
+        #score-val { color: var(--magenta); }
+
+        .hud-line {
+            margin-top: 8px;
+            font-size: 11px;
+            letter-spacing: 0.2em;
+            color: #6f97a7;
+        }
+
+        .hud-line span { color: var(--ice); }
+
+        /* ------------------------------------------------------------------ */
+        /* Weapon bar                                                          */
+        /* ------------------------------------------------------------------ */
+
+        #weapon-bar {
+            position: absolute;
+            left: 50%;
+            bottom: 26px;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 9px;
+            z-index: 7;
+        }
+
+        .weapon-slot {
+            position: relative;
+            width: 94px;
+            height: 60px;
+            padding: 9px 8px 7px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            color: #7e9fac;
+            background: linear-gradient(160deg, rgba(8, 14, 22, 0.94), rgba(3, 6, 11, 0.8));
+            border: 1px solid rgba(39, 231, 255, 0.18);
+            clip-path: polygon(0 0, 100% 0, 100% calc(100% - 11px), calc(100% - 11px) 100%, 0 100%);
+            transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s, color 0.18s;
+        }
+
+        .weapon-slot .slot-index {
+            position: absolute;
+            top: 5px;
+            left: 6px;
+            font-size: 8px;
+            color: rgba(39, 231, 255, 0.55);
+        }
+
+        .weapon-slot.active {
+            color: #ffffff;
+            border-color: var(--cyan);
+            transform: translateY(-5px);
+            box-shadow: 0 0 26px rgba(39, 231, 255, 0.28), inset 0 0 22px rgba(39, 231, 255, 0.1);
+        }
+
+        .weapon-slot.active::after {
+            content: "";
+            position: absolute;
+            left: 18%;
+            right: 18%;
+            bottom: 0;
+            height: 2px;
+            background: var(--cyan);
+            box-shadow: 0 0 12px var(--cyan);
+        }
+
+        .weapon-slot.locked { opacity: 0.32; }
+
+        .ammo-count {
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            color: var(--ice);
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Crosshair / message / minimap                                       */
+        /* ------------------------------------------------------------------ */
+
         #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; display: flex; flex-direction: column;
-            justify-content: center; align-items: center;
-        }
-
-        #debug-log {
-            position: absolute; top: 0; right: 0;
-            width: 300px; max-height: 100px; overflow-y: scroll;
-            background: rgba(0,0,0,0.8); color: #ff5555; font-size: 10px;
-            padding: 5px; border-left: 2px solid #ff0000; z-index: 99;
-            pointer-events: auto;
-        }
-
-        #damage-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle, transparent 50%, rgba(255,0,0,0.4) 100%);
-            opacity: 0; pointer-events: none; transition: opacity 0.1s;
+            position: absolute;
+            inset: 0;
             z-index: 5;
+            pointer-events: none;
         }
 
         #crosshair {
-            width: 20px; height: 20px;
-            border: 2px dotted rgba(255, 255, 255, 0.8); /* Dotted border for wireframe feel */
-            border-radius: 50%;
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 0 8px #0ff; /* Enhanced neon glow */
-            transition: transform 0.1s;
-        }
-
-        #hud {
-            position: absolute; top: 20px; left: 20px;
-            width: 250px;
-            color: #0ff; font-size: 16px;
-            text-shadow: 0 0 5px #0ff;
-            display: flex; flex-direction: column; gap: 10px;
-        }
-
-        /* Health Bar - Kept for critical info */
-        #health-container {
-            width: 100%; height: 20px;
-            background: #002222; border: 2px solid #0ff;
-            border-radius: 4px; overflow: hidden;
-        }
-        #health-bar {
-            width: 100%; height: 100%;
-            background: linear-gradient(90deg, #ff00ff, #ff44ff); /* Pink/Magenta Neon */
-            transition: width 0.2s;
-        }
-        
-        #score-container {
-            font-size: 24px; color: #ff00ff; font-weight: bold;
-            text-shadow: 0 0 10px #ff00ff;
-        }
-        
-        #weapon-bar {
-            position: absolute; bottom: 20px; left: 50%;
-            transform: translateX(-50%);
-            display: flex; gap: 10px;
-            background: rgba(0,0,0,0.8);
-            padding: 10px; border-radius: 10px;
-            border: 1px solid #0ff; /* Neon border */
-        }
-        .weapon-slot {
-            width: 70px; height: 50px;
-            background: #000; border: 2px solid #0ff; border-radius: 5px;
-            display: flex; justify-content: center; align-items: center;
-            color: #44ffff; font-weight: bold; font-size: 10px;
-            position: relative; transition: all 0.2s;
-            flex-direction: column; /* Center text */
-        }
-        .weapon-slot.active {
-            border-color: #fff; background: #002244; color: #fff;
-            transform: scale(1.1); box-shadow: 0 0 20px #0ff;
-        }
-        .weapon-slot.locked { opacity: 0.5; border-color: #333; }
-        .ammo-count { position: relative; bottom: -5px; right: 0; font-size: 10px; color: #fff; text-shadow: none; }
-        
-        #message-box {
-            position: absolute; bottom: 100px;
-            background: rgba(0, 0, 0, 0.7); color: white;
-            padding: 10px 20px; border-radius: 5px;
-            font-size: 18px; opacity: 0; transition: opacity 0.3s;
-            border-left: 4px solid #0ff;
-            text-shadow: 0 0 5px #0ff;
-        }
-
-        #wasted-screen {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95); color: #f00;
-            display: none; flex-direction: column;
-            justify-content: center; align-items: center;
-            font-size: 80px; font-weight: bold; font-family: 'Impact', sans-serif;
-            text-shadow: 0 0 30px #f00; z-index: 30;
-        }
-
-        /* Floating Health Bar (NPC & CAR) - Unified style */
-        .entity-health-bar {
             position: absolute;
-            width: 50px; height: 5px;
-            background: #001100; border: 1px solid #00ff00;
+            top: 50%;
+            left: 50%;
+            width: 36px;
+            height: 36px;
             transform: translate(-50%, -50%);
-            pointer-events: none;
-            z-index: 20;
-            box-shadow: 0 0 5px #0f0;
-        }
-        .entity-health-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #00ff00, #44ff44);
-            transition: width 0.1s, background 0.1s;
+            z-index: 7;
+            opacity: 0.9;
+            filter: drop-shadow(0 0 6px rgba(39, 231, 255, 0.8));
         }
 
+        #crosshair::before,
+        #crosshair::after {
+            content: "";
+            position: absolute;
+            background: var(--cyan);
+            opacity: 0.9;
+        }
+
+        #crosshair::before {
+            left: 0;
+            top: 50%;
+            width: 100%;
+            height: 1px;
+            transform: translateY(-50%);
+            background: linear-gradient(90deg, var(--cyan) 0 26%, transparent 26% 74%, var(--cyan) 74%);
+        }
+
+        #crosshair::after {
+            top: 0;
+            left: 50%;
+            width: 1px;
+            height: 100%;
+            transform: translateX(-50%);
+            background: linear-gradient(180deg, var(--cyan) 0 26%, transparent 26% 74%, var(--cyan) 74%);
+        }
+
+        #crosshair {
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0 1.5px, transparent 2.2px);
+        }
+
+        #message-box {
+            position: absolute;
+            left: 50%;
+            bottom: 112px;
+            transform: translateX(-50%);
+            padding: 9px 22px;
+            font-size: 12px;
+            letter-spacing: 0.22em;
+            color: var(--ice);
+            background: rgba(4, 8, 13, 0.82);
+            border-left: 2px solid var(--cyan);
+            border-right: 2px solid rgba(39, 231, 255, 0.2);
+            clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+            opacity: 0;
+            transition: opacity 0.25s;
+            white-space: nowrap;
+            text-transform: uppercase;
+        }
 
         #minimap-container {
-            position: absolute; bottom: 20px; left: 20px;
-            width: 200px; height: 200px;
-            border: 2px solid #0ff; border-radius: 50%;
-            overflow: hidden; background: rgba(0, 0, 0, 0.85);
-            z-index: 10; box-shadow: 0 0 10px #0ff;
+            position: absolute;
+            left: 24px;
+            bottom: 24px;
+            width: 190px;
+            height: 190px;
+            z-index: 6;
+            border: 1px solid rgba(39, 231, 255, 0.4);
+            border-radius: 50%;
+            background: rgba(3, 6, 11, 0.88);
+            box-shadow: 0 0 28px rgba(39, 231, 255, 0.15), inset 0 0 30px rgba(3, 6, 11, 0.9);
+            overflow: hidden;
         }
+
         #minimap { width: 100%; height: 100%; display: block; }
 
+        #minimap-container::after {
+            content: "GRID//MAP";
+            position: absolute;
+            left: 50%;
+            bottom: 10px;
+            transform: translateX(-50%);
+            font-size: 8px;
+            letter-spacing: 0.3em;
+            color: rgba(39, 231, 255, 0.65);
+        }
+
         #controls-hint {
-            position: absolute; bottom: 20px; right: 20px;
-            color: rgba(0, 255, 255, 0.8);
-            font-size: 12px; text-align: right;
-            text-shadow: 0 0 5px #0ff;
+            position: absolute;
+            right: 24px;
+            bottom: 24px;
+            z-index: 6;
+            max-width: 330px;
+            text-align: right;
+            font-size: 10px;
+            line-height: 1.9;
+            letter-spacing: 0.18em;
+            color: rgba(143, 184, 200, 0.8);
+            text-transform: uppercase;
+            pointer-events: none;
+        }
+
+        #controls-hint b { color: var(--cyan); font-weight: 600; }
+
+        /* ------------------------------------------------------------------ */
+        /* Debug log                                                           */
+        /* ------------------------------------------------------------------ */
+
+        #debug-log {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            z-index: 12;
+            width: 300px;
+            max-height: 92px;
+            overflow: hidden;
+            padding: 8px 10px;
+            font-family: "Cascadia Mono", "Courier New", monospace;
+            font-size: 9px;
+            line-height: 1.5;
+            letter-spacing: 0;
+            color: #ffb03a;
+            background: rgba(5, 8, 12, 0.72);
+            border: 1px solid rgba(255, 176, 58, 0.18);
+            border-left: 2px solid rgba(255, 59, 78, 0.7);
+            pointer-events: none;
+        }
+
+        #debug-log p { margin: 0 0 2px; }
+        #debug-log:empty { display: none; }
+
+        /* ------------------------------------------------------------------ */
+        /* Screens                                                             */
+        /* ------------------------------------------------------------------ */
+
+        #loading {
+            position: fixed;
+            inset: 0;
+            z-index: 40;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background:
+                radial-gradient(circle at 50% 45%, rgba(31, 40, 74, 0.55), transparent 62%),
+                repeating-linear-gradient(0deg, rgba(39, 231, 255, 0.03) 0 1px, transparent 1px 46px),
+                repeating-linear-gradient(90deg, rgba(39, 231, 255, 0.03) 0 1px, transparent 1px 46px),
+                #03050a;
+        }
+
+        .load-title {
+            font-size: clamp(30px, 6vw, 64px);
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: #ffffff;
+            text-shadow: 2px 0 var(--magenta), -2px 0 var(--cyan), 0 0 42px rgba(39, 231, 255, 0.35);
+        }
+
+        .load-title.error { color: var(--red); text-shadow: 0 0 30px rgba(255, 59, 78, 0.5); }
+
+        .load-sub {
+            font-size: 11px;
+            letter-spacing: 0.4em;
+            color: var(--muted);
+            text-transform: uppercase;
+            max-width: 80vw;
+            text-align: center;
+        }
+
+        .load-bar {
+            width: 240px;
+            height: 3px;
+            margin-top: 8px;
+            background: rgba(39, 231, 255, 0.12);
+            overflow: hidden;
+        }
+
+        .load-bar span {
+            display: block;
+            width: 35%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+            animation: loadSweep 1.2s infinite linear;
+        }
+
+        @keyframes loadSweep {
+            from { transform: translateX(-120%); }
+            to { transform: translateX(400%); }
+        }
+
+        #damage-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.12s;
+            background: radial-gradient(circle at center, transparent 42%, rgba(255, 20, 48, 0.55) 100%);
         }
 
         #blocker {
-            position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.95);
-            display: flex; justify-content: center; align-items: center;
-            z-index: 10; pointer-events: auto;
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            background:
+                radial-gradient(circle at 50% 40%, rgba(18, 24, 43, 0.75), rgba(2, 4, 9, 0.94) 70%),
+                repeating-linear-gradient(0deg, rgba(39, 231, 255, 0.035) 0 1px, transparent 1px 44px),
+                repeating-linear-gradient(90deg, rgba(39, 231, 255, 0.035) 0 1px, transparent 1px 44px);
+            backdrop-filter: blur(3px);
+            cursor: pointer;
         }
 
-        #instructions { text-align: center; color: white; cursor: pointer; }
-        h1 { margin-bottom: 10px; text-shadow: 0 0 10px #f0f; color: #fff; }
+        #instructions {
+            position: relative;
+            width: min(760px, 92vw);
+            padding: 46px 46px 40px;
+            text-align: center;
+            background: var(--panel);
+            border: 1px solid rgba(39, 231, 255, 0.22);
+            clip-path: polygon(0 0, calc(100% - 34px) 0, 100% 34px, 100% 100%, 34px 100%, 0 calc(100% - 34px));
+            box-shadow: 0 0 80px rgba(39, 231, 255, 0.1), inset 0 0 90px rgba(39, 231, 255, 0.03);
+        }
+
+        #instructions::before,
+        #instructions::after {
+            content: "";
+            position: absolute;
+            width: 42px;
+            height: 42px;
+            border: 1px solid rgba(39, 231, 255, 0.35);
+            pointer-events: none;
+        }
+
+        #instructions::before { top: 14px; left: 14px; border-right: 0; border-bottom: 0; }
+        #instructions::after { bottom: 14px; right: 14px; border-left: 0; border-top: 0; }
+
+        #instructions h1 {
+            margin: 0 0 8px;
+            font-size: clamp(34px, 6.4vw, 74px);
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            line-height: 0.95;
+            color: #ffffff;
+            text-shadow: 3px 0 var(--magenta), -3px 0 var(--cyan), 0 0 60px rgba(39, 231, 255, 0.35);
+        }
+
+        .tagline {
+            margin: 0 0 6px;
+            font-size: 11px;
+            letter-spacing: 0.44em;
+            color: var(--cyan);
+            text-transform: uppercase;
+        }
+
+        .briefing {
+            margin: 18px auto 0;
+            max-width: 540px;
+            font-size: 12px;
+            line-height: 1.8;
+            letter-spacing: 0.1em;
+            color: #94aebb;
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
+            gap: 10px 26px;
+            margin: 28px auto 0;
+            max-width: 580px;
+            text-align: left;
+            font-size: 11px;
+            letter-spacing: 0.16em;
+            color: #9db7c3;
+            text-transform: uppercase;
+        }
+
+        .control-grid div { display: flex; align-items: center; gap: 10px; }
+
         .key {
-            display: inline-block; padding: 2px 6px;
-            border: 1px solid #0ff; border-radius: 4px;
-            background: #222; font-family: monospace; margin: 0 2px;
-            box-shadow: 0 0 5px #0ff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 30px;
+            padding: 4px 8px;
+            border: 1px solid rgba(39, 231, 255, 0.4);
+            border-radius: 2px;
+            color: var(--ice);
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            background: rgba(39, 231, 255, 0.06);
+            box-shadow: 0 0 14px rgba(39, 231, 255, 0.12) inset;
         }
-        
-        #loading {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            color: white; font-size: 24px;
-            pointer-events: none; z-index: 20;
-            text-shadow: 0 0 10px #fff;
+
+        .start-prompt {
+            margin-top: 30px;
+            font-size: 12px;
+            letter-spacing: 0.36em;
+            color: var(--ice);
+            text-transform: uppercase;
+            animation: promptPulse 2s infinite ease-in-out;
         }
-        
-        #full-map-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.95);
+
+        @keyframes promptPulse {
+            0%, 100% { opacity: 0.55; text-shadow: 0 0 0 transparent; }
+            50% { opacity: 1; text-shadow: 0 0 22px rgba(39, 231, 255, 0.6); }
+        }
+
+        #wasted-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 30;
             display: none;
-            justify-content: center; align-items: center;
-            z-index: 15;
-            /* Enable pointer events on the layer for map clicks */
-            pointer-events: auto;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            text-align: center;
+            background: rgba(2, 3, 7, 0.94);
+            cursor: pointer;
         }
+
+        #wasted-screen > div:first-child {
+            font-size: clamp(48px, 10vw, 120px);
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            color: #ffffff;
+            text-shadow: 4px 0 var(--red), -4px 0 var(--cyan), 0 0 70px rgba(255, 59, 78, 0.5);
+        }
+
+        #wasted-screen > div:last-child {
+            font-size: 12px;
+            letter-spacing: 0.34em;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        #full-map-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 18;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(2, 4, 9, 0.92);
+            backdrop-filter: blur(4px);
+            cursor: crosshair;
+        }
+
         #full-map-canvas {
-            border: 2px solid #0ff;
-            background: #111;
-            box-shadow: 0 0 30px #0ff;
+            width: 100%;
+            height: 100%;
+            display: block;
         }
+
         #map-legend {
-            position: absolute; bottom: 40px; right: 40px;
-            color: #0ff; font-family: monospace;
-            background: rgba(0,0,0,0.8); padding: 15px;
-            border: 1px solid #0ff;
-            box-shadow: 0 0 10px #0ff;
-            pointer-events: none; /* Ignore clicks on the legend */
+            position: absolute;
+            right: 40px;
+            bottom: 40px;
+            padding: 16px 20px;
+            font-family: "Cascadia Mono", "Courier New", monospace;
+            font-size: 11px;
+            letter-spacing: 0.06em;
+            color: #a9c8d4;
+            background: rgba(4, 8, 13, 0.82);
+            border: 1px solid rgba(39, 231, 255, 0.24);
+            clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+            pointer-events: none;
         }
-        .legend-item { display: flex; align-items: center; margin: 5px 0; font-size: 14px; }
-        .dot { width: 12px; height: 12px; margin-right: 10px; border-radius: 50%; }
-        
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 6px 0;
+            text-transform: uppercase;
+        }
+
+        .dot { width: 9px; height: 9px; border-radius: 50%; }
+
+        .entity-health-bar {
+            position: absolute;
+            width: 54px;
+            height: 5px;
+            transform: translate(-50%, -50%);
+            background: rgba(3, 6, 10, 0.85);
+            border: 1px solid rgba(39, 231, 255, 0.25);
+            pointer-events: none;
+            z-index: 20;
+            box-shadow: 0 0 8px rgba(39, 231, 255, 0.2);
+        }
+
+        .entity-health-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, var(--green), #b6ffe0);
+            transition: width 0.1s;
+        }
+
         .floating-score {
             position: absolute;
-            color: #ffcc00; font-weight: bold; font-size: 20px;
-            text-shadow: 2px 2px 0 #000; pointer-events: none;
+            z-index: 21;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--amber);
+            text-shadow: 0 0 14px rgba(255, 176, 58, 0.7), 2px 2px 0 #000;
+            pointer-events: none;
             animation: floatUp 1s ease-out forwards;
         }
+
         @keyframes floatUp {
             0% { opacity: 1; transform: translateY(0) scale(1); }
-            100% { opacity: 0; transform: translateY(-50px) scale(1.5); }
+            100% { opacity: 0; transform: translateY(-52px) scale(1.35); }
+        }
+
+        @media (max-width: 820px) {
+            #hud { width: 250px; }
+            #minimap-container { width: 140px; height: 140px; }
+            #weapon-bar { gap: 6px; }
+            .weapon-slot { width: 70px; height: 52px; font-size: 8px; }
+            #controls-hint { display: none; }
+            #debug-log { width: 220px; }
+            #instructions { padding: 32px 24px 30px; }
+            .control-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Mobile touch mode                                                   */
+        /* ------------------------------------------------------------------ */
+
+        .mobile-controls, .mobile-copy { display: none; }
+
+        body.is-mobile {
+            touch-action: none;
+            overscroll-behavior: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body.is-mobile #canvas-container canvas { touch-action: none; }
+        body.is-mobile #controls-hint, body.is-mobile #debug-log { display: none; }
+
+        body.is-mobile #hud {
+            top: max(12px, env(safe-area-inset-top));
+            left: max(12px, env(safe-area-inset-left));
+            width: 224px;
+        }
+        body.is-mobile .hud-panel { padding: 10px 14px 12px; }
+        body.is-mobile #health-container { margin: 6px 0 10px; }
+        body.is-mobile #score-container { font-size: 22px; }
+        body.is-mobile .hud-line { margin-top: 5px; font-size: 9px; }
+        body.is-mobile #minimap-container {
+            top: max(12px, env(safe-area-inset-top));
+            right: max(12px, env(safe-area-inset-right));
+            bottom: auto;
+            left: auto;
+            width: 118px;
+            height: 118px;
+        }
+        body.is-mobile #minimap-container::after { bottom: 6px; font-size: 7px; }
+        body.is-mobile #weapon-bar { bottom: max(10px, env(safe-area-inset-bottom)); gap: 4px; }
+        body.is-mobile .weapon-slot { width: 58px; height: 44px; padding: 6px 3px; gap: 1px; font-size: 7px; }
+        body.is-mobile .weapon-slot .slot-index { top: 4px; left: 4px; font-size: 7px; }
+        body.is-mobile .ammo-count { font-size: 8px; }
+        body.is-mobile .weapon-slot.active { transform: translateY(-3px); }
+        body.is-mobile #message-box {
+            bottom: calc(78px + env(safe-area-inset-bottom));
+            padding: 6px 12px;
+            font-size: 9px;
+            letter-spacing: 0.14em;
+        }
+        body.is-mobile #crosshair { width: 30px; height: 30px; }
+        body.is-mobile #instructions { width: min(680px, 94vw); padding: 24px 28px 22px; }
+        body.is-mobile #instructions h1 { font-size: clamp(30px, 5vw, 48px); }
+        body.is-mobile .briefing { display: none; }
+        body.is-mobile .desktop-controls { display: none; }
+        body.is-mobile .mobile-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-width: 520px;
+            margin-top: 18px;
+            text-align: center;
+        }
+        body.is-mobile .desktop-copy { display: none; }
+        body.is-mobile .mobile-copy { display: block; }
+        body.is-mobile .start-prompt { margin-top: 18px; }
+
+        #mobile-ui { display: none; position: fixed; inset: 0; z-index: 15; pointer-events: none; }
+        body.mobile-playing #mobile-ui { display: block; }
+
+        #joystick {
+            position: fixed;
+            left: 18px;
+            left: max(18px, env(safe-area-inset-left));
+            bottom: 18px;
+            bottom: calc(18px + env(safe-area-inset-bottom));
+            width: 136px;
+            height: 136px;
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: none;
+            opacity: 0.82;
+            background: radial-gradient(circle, rgba(16, 34, 48, 0.42), rgba(4, 10, 16, 0.2));
+            border: 1px solid rgba(39, 231, 255, 0.32);
+            box-shadow: inset 0 0 30px rgba(39, 231, 255, 0.07), 0 0 26px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(5px);
+        }
+        #joystick::before {
+            content: "";
+            position: absolute;
+            inset: 13px;
+            border-radius: 50%;
+            border: 1px dashed rgba(39, 231, 255, 0.18);
+        }
+        #joystick.active {
+            opacity: 1;
+            border-color: rgba(39, 231, 255, 0.7);
+            box-shadow: 0 0 34px rgba(39, 231, 255, 0.18), inset 0 0 34px rgba(39, 231, 255, 0.12);
+        }
+        #joystick-knob {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            background: radial-gradient(circle at 35% 30%, rgba(150, 248, 255, 0.52), rgba(20, 115, 145, 0.3));
+            border: 1px solid rgba(39, 231, 255, 0.58);
+            box-shadow: 0 0 22px rgba(39, 231, 255, 0.3);
+            transition: transform 0.08s ease-out;
+        }
+        #joystick.active #joystick-knob { transition: none; }
+        #mobile-hint {
+            position: fixed;
+            right: 18px;
+            right: max(18px, env(safe-area-inset-right));
+            bottom: 72px;
+            bottom: calc(72px + env(safe-area-inset-bottom));
+            font-size: 8px;
+            letter-spacing: 0.2em;
+            color: rgba(143, 184, 200, 0.62);
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+            pointer-events: none;
+        }
+
+        #rotate-device {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 90;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            padding: 24px;
+            text-align: center;
+            background: rgba(2, 4, 9, 0.97);
+        }
+        #rotate-device .rotate-phone {
+            width: 50px;
+            height: 84px;
+            border: 2px solid var(--cyan);
+            border-radius: 8px;
+            box-shadow: 0 0 26px rgba(39, 231, 255, 0.3);
+            animation: rotateHint 2.2s ease-in-out infinite;
+        }
+        #rotate-device .rotate-title { font-size: 18px; letter-spacing: 0.26em; color: var(--ice); }
+        #rotate-device .rotate-sub { font-size: 9px; letter-spacing: 0.24em; color: var(--muted); text-transform: uppercase; }
+        @keyframes rotateHint {
+            0%, 20% { transform: rotate(0deg); }
+            65%, 100% { transform: rotate(90deg); }
+        }
+        @media (orientation: portrait) {
+            body.is-mobile #rotate-device { display: flex; }
         }
     </style>
 </head>
 <body>
 
     <div id="canvas-container"></div>
-    <div id="loading">Loading Wireframe Grid...</div>
+
+    <div id="loading">
+        <div class="load-title">NEON GRID STRIKE</div>
+        <div class="load-sub">Initializing neural grid</div>
+        <div class="load-bar"><span></span></div>
+    </div>
+
     <div id="damage-overlay"></div>
-    <div id="debug-log"></div>
-    
+    <div id="fx-overlay"></div>
+    <div id="debug-log" aria-live="polite"></div>
+
     <div id="wasted-screen">
-        <div>GRID FAILED</div>
-        <div style="font-size: 20px; color: white; font-weight: normal; margin-top: 20px;">Click to Re-Initialize</div>
+        <div>SYSTEM FLATLINE</div>
+        <div>Click to re-initialize</div>
     </div>
 
     <div id="full-map-layer">
         <canvas id="full-map-canvas"></canvas>
         <div id="map-legend">
-            <div class="legend-item"><div class="dot" style="background:#fff; border: 2px solid #000;"></div>You</div>
-            <div class="legend-item"><div class="dot" style="background:#f00"></div>Enemy</div>
-            <div class="legend-item"><div class="dot" style="background:#0ff; border-radius: 0;"></div>Vehicle</div>
-            <div class="legend-item"><div class="dot" style="background:#ffaa00"></div>Loot/Hearts</div>
-        </div>
-    </div>
-
-    <div id="ui-layer">
-        <div id="crosshair"></div>
-        <div id="message-box">Press <span class="key">E</span> to Access Console</div>
-        
-        <div id="weapon-bar">
-            <div class="weapon-slot active" id="slot-0">PISTOL<span class="ammo-count">INF</span></div>
-            <div class="weapon-slot locked" id="slot-1">RIFLE<span class="ammo-count">0</span></div>
-            <div class="weapon-slot locked" id="slot-2">ROCKET<span class="ammo-count">0</span></div>
-            <div class="weapon-slot locked" id="slot-3">GRENADE<span class="ammo-count">0</span></div>
-            <div class="weapon-slot locked" id="slot-4">MOLOTOV<span class="ammo-count">0</span></div>
+            <div class="legend-item"><div class="dot" style="background:#fff;"></div>You</div>
+            <div class="legend-item"><div class="dot" style="background:#ff2bd6;"></div>Enforcement</div>
+            <div class="legend-item"><div class="dot" style="background:#ff3b4e;"></div>Gang</div>
+            <div class="legend-item"><div class="dot" style="background:#39ff9e;"></div>Civilian</div>
+            <div class="legend-item"><div class="dot" style="background:#27e7ff; border-radius:0;"></div>Vehicle</div>
+            <div class="legend-item"><div class="dot" style="background:#ffb03a;"></div>Loot / Medkit</div>
         </div>
     </div>
 
     <div id="hud">
-        <div id="health-container"><div id="health-bar"></div></div>
-        <div id="score-container">SCORE: <span id="score-val">0</span></div>
-        <div>MODE: <span id="mode-display">WALKING</span></div>
-        <div>NPCS: <span id="npc-count">0</span></div>
+        <div class="hud-panel">
+            <div class="hud-label">Integrity</div>
+            <div id="health-container"><div id="health-bar"></div></div>
+            <div id="score-container">SCORE <span id="score-val">0</span></div>
+            <div class="hud-line">MODE // <span id="mode-display">WALKING</span></div>
+            <div class="hud-line">HOSTILES // <span id="npc-count">0</span></div>
+        </div>
     </div>
 
     <div id="minimap-container">
         <canvas id="minimap" width="200" height="200"></canvas>
     </div>
 
-    <div id="controls-hint">WASD: Move | SPACE: Jump | CLICK: Shoot | E: Interact | M: Map | SCROLL: Switch Weapon</div>
+    <div id="controls-hint">
+        <b>WASD</b> Move &nbsp;•&nbsp; <b>SPACE</b> Jump / Brake<br>
+        <b>LMB</b> Fire &nbsp;•&nbsp; <b>E</b> Vehicle Link<br>
+        <b>M</b> City Map &nbsp;•&nbsp; <b>SCROLL</b> Weapon
+    </div>
 
-    <div id="blocker" style="display:none;">
+    <div id="ui-layer">
+        <div id="crosshair"></div>
+        <div id="message-box">Press E to access console</div>
+
+        <div id="weapon-bar">
+            <div class="weapon-slot active" id="slot-0"><span class="slot-index">01</span>PISTOL<span class="ammo-count">INF</span></div>
+            <div class="weapon-slot locked" id="slot-1"><span class="slot-index">02</span>RIFLE<span class="ammo-count">0</span></div>
+            <div class="weapon-slot locked" id="slot-2"><span class="slot-index">03</span>ROCKET<span class="ammo-count">0</span></div>
+            <div class="weapon-slot locked" id="slot-3"><span class="slot-index">04</span>GRENADE<span class="ammo-count">0</span></div>
+            <div class="weapon-slot locked" id="slot-4"><span class="slot-index">05</span>MOLOTOV<span class="ammo-count">0</span></div>
+        </div>
+    </div>
+
+    <div id="mobile-ui">
+        <div id="joystick" aria-label="Movement joystick"><div id="joystick-knob"></div></div>
+        <div id="mobile-hint">Drag / Look &nbsp;·&nbsp; Tap / Fire</div>
+    </div>
+
+    <div id="rotate-device">
+        <div class="rotate-phone"></div>
+        <div class="rotate-title">ROTATE TO LANDSCAPE</div>
+        <div class="rotate-sub">Touch link requires landscape orientation</div>
+    </div>
+
+    <div id="blocker">
         <div id="instructions">
-            <h1>NEON GRID STRIKE WIREFRAME</h1>
-            <p>Click to Begin Simulation</p>
-            <br>
-            <p><span class="key">W,A,S,D</span> Navigate</p>
-            <p><span class="key">MOUSE</span> Orient View</p>
-            <p><span class="key">L-CLICK</span> Fire Projectile</p>
-            <p><span class="key">E</span> Access Vehicle Console</p>
-            <p>Eliminate Hostile Agents!</p>
+            <div class="tagline">Sector 07 // Night City</div>
+            <h1>NEON GRID STRIKE</h1>
+            <p class="briefing">
+                The grid is down and the precinct has gone hostile. Jack in, scavenge weapon modules,
+                take a vehicle off the street and survive the enforcement sweep.
+            </p>
+
+            <div class="control-grid desktop-controls">
+                <div><span class="key">W A S D</span> Navigate</div>
+                <div><span class="key">MOUSE</span> Orient view</div>
+                <div><span class="key">LMB</span> Fire weapon</div>
+                <div><span class="key">SPACE</span> Jump / brake</div>
+                <div><span class="key">E</span> Enter / exit vehicle</div>
+                <div><span class="key">M</span> City map / fast travel</div>
+                <div><span class="key">SCROLL</span> Cycle weapons</div>
+                <div><span class="key">1 - 5</span> Direct weapon select</div>
+            </div>
+
+            <div class="control-grid mobile-controls">
+                <div><span class="key">STICK</span> Move</div>
+                <div><span class="key">DRAG</span> Look</div>
+                <div><span class="key">TAP</span> Fire</div>
+            </div>
+
+            <div class="start-prompt desktop-copy">Click to jack in</div>
+            <div class="start-prompt mobile-copy">Tap to deploy</div>
         </div>
     </div>
 
@@ -271,1405 +912,6 @@
             }
         }
     </script>
-
-    <script type="module">
-        import * as THREE from 'three';
-        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-
-        // --- CONFIGURATION ---
-        const JAIL_POS = new THREE.Vector3(10, 0, 10); // Jail location near the origin
-
-        const CONFIG = {
-            fogColor: 0x000000, 
-            buildingColor: 0x0088ff, // Base wireframe color
-            groundColor: 0x004444, // Ground grid color
-            neonColors: [0xff00ff, 0x00ffff, 0xffff00, 0xff3333], // Accent neon colors
-            citySize: 2000, 
-            cityOffset: 0, 
-            blockSize: 100,
-            roadWidth: 40,
-            npcCount: 45, // Reduced regular NPCs to make room for cops
-            carCount: 20,
-            pickupCount: 15,
-            heartCount: 10,
-            copCount: 5, // New Cop count
-            copSpeedMultiplier: 1.5,
-        };
-
-        const WEAPONS = [
-            { name: "Pistol", type: "raycast", damage: 35, fireRate: 0.4, auto: false, color: 0x00ff00, ammo: 9999 },
-            { name: "Rifle", type: "raycast", damage: 15, fireRate: 0.1, auto: true, color: 0xff00ff, ammo: 0 },
-            { name: "Rocket", type: "rocket", damage: 200, fireRate: 1.5, auto: false, color: 0xffff00, ammo: 0 },
-            { name: "Grenade", type: "throw", damage: 150, fireRate: 1.0, auto: false, color: 0x00ffff, ammo: 0 },
-            { name: "Molotov", type: "throw", damage: 50, fireRate: 1.0, auto: false, color: 0xffaa00, ammo: 0 } 
-        ];
-
-        // --- GLOBAL ARRAYS & VARIABLES ---
-        const colliders = []; 
-        const npcs = [];
-        const cars = [];
-        const pickups = [];
-        const projectiles = [];
-        const particles = [];
-        let gunMesh;
-        let muzzleFlashLight;
-
-        let camera, scene, renderer, controls;
-        let raycaster;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
-        let isFiring = false;
-        let fireTimer = 0;
-        let prevTime = performance.now();
-        let velocity = new THREE.Vector3();
-        let direction = new THREE.Vector3();
-        let score = 0;
-        let isMapOpen = false;
-        let playerHealth = 100;
-        let isDead = false;
-        let lastExplosionTime = 0; // NEW: Rate limit explosions
-        
-        let gameState = {
-            mode: 'walking', 
-            currentVehicle: null,
-            currentWeaponIdx: 0,
-            inventory: [true, false, false, false, false], 
-            ammo: [9999, 0, 0, 0, 0]
-        };
-
-        // UI Elements (Defined globally outside functions)
-        const instructions = document.getElementById('instructions');
-        const blocker = document.getElementById('blocker');
-        const messageBox = document.getElementById('message-box');
-        const modeDisplay = document.getElementById('mode-display');
-        const npcDisplay = document.getElementById('npc-count');
-        const scoreDisplay = document.getElementById('score-val');
-        const loadingText = document.getElementById('loading');
-        const minimapCanvas = document.getElementById('minimap');
-        const minimapCtx = minimapCanvas.getContext('2d');
-        const weaponSlots = document.querySelectorAll('.weapon-slot');
-        const fullMapLayer = document.getElementById('full-map-layer');
-        const fullMapCanvas = document.getElementById('full-map-canvas');
-        const fullMapCtx = document.getElementById('full-map-canvas')?.getContext('2d');
-        const damageOverlay = document.getElementById('damage-overlay');
-        const healthBar = document.getElementById('health-bar');
-        const wastedScreen = document.getElementById('wasted-screen');
-        const debugLog = document.getElementById('debug-log');
-        
-        // Custom logging utility
-        function logDebug(message) {
-            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-            debugLog.innerHTML = `<p>[${time}] ${message}</p>` + debugLog.innerHTML;
-        }
-
-        // --- AUDIO FUNCTIONS (Moved up for availability) ---
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        let carEngineOsc = null;
-        let carEngineGain = null;
-
-        function resumeAudio() { if (audioCtx.state === 'suspended') audioCtx.resume(); }
-        function playSound(type) {
-            resumeAudio();
-            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination);
-            const now = audioCtx.currentTime;
-            
-            // Wireframe sounds are more synthetic/glitchy
-            if (type === 'shoot') {
-                osc.type = 'square'; osc.frequency.setValueAtTime(1000, now); osc.frequency.linearRampToValueAtTime(800, now + 0.05);
-                gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1); osc.start(); osc.stop(now + 0.1);
-            } else if (type === 'enemyShoot') {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(600, now); osc.frequency.linearRampToValueAtTime(400, now + 0.1);
-                gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2); osc.start(); osc.stop(now + 0.2);
-            } else if (type === 'explosion') {
-                const noise = audioCtx.createBufferSource();
-                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
-                const data = buffer.getChannelData(0);
-                for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-                noise.buffer = buffer; noise.connect(gain);
-                gain.gain.setValueAtTime(1.0, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5); noise.start();
-            } else if (type === 'die') {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
-                gain.gain.setValueAtTime(0.3, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(); osc.stop(now + 0.3);
-            } else if (type === 'score') {
-                osc.type = 'square'; osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(880, now + 0.1);
-                gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.2); osc.start(); osc.stop(now + 0.2);
-            } else if (type === 'pickup') {
-                osc.type = 'sine'; osc.frequency.setValueAtTime(600, now); osc.frequency.linearRampToValueAtTime(1200, now + 0.1);
-                gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.1); osc.start(); osc.stop(now + 0.1);
-            } else if (type === 'heal') {
-                osc.type = 'triangle'; osc.frequency.setValueAtTime(300, now); osc.frequency.linearRampToValueAtTime(600, now + 0.3);
-                gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(); osc.stop(now + 0.3);
-            }
-        }
-        function startCarSound() {
-            resumeAudio();
-            if (carEngineOsc) return;
-            carEngineOsc = audioCtx.createOscillator(); carEngineGain = audioCtx.createGain();
-            carEngineOsc.type = 'square'; carEngineOsc.frequency.value = 80;
-            const f = audioCtx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 300;
-            carEngineOsc.connect(f); f.connect(carEngineGain); carEngineGain.connect(audioCtx.destination);
-            carEngineGain.gain.setValueAtTime(0, audioCtx.currentTime); carEngineGain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.5);
-            carEngineOsc.start();
-        }
-        function stopCarSound() {
-            if (carEngineOsc) {
-                carEngineGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
-                const osc = carEngineOsc; setTimeout(() => { try { osc.stop(); osc.disconnect(); } catch(e){} }, 500);
-                carEngineOsc = null;
-            }
-        }
-        function updateCarEngine(speed) {
-            if (carEngineOsc) carEngineOsc.frequency.setTargetAtTime(80 + Math.abs(speed) * 2.5, audioCtx.currentTime, 0.1);
-        }
-
-        // --- CORE LOGIC & UI HELPERS (Moved up for definition) ---
-        
-        function updateWeaponUI() {
-            weaponSlots.forEach((slot, index) => {
-                const isCurrent = index === gameState.currentWeaponIdx;
-                const isOwned = gameState.inventory[index];
-                slot.classList.toggle('active', isCurrent);
-                slot.classList.toggle('locked', !isOwned);
-                const ammoSpan = slot.querySelector('.ammo-count');
-                if (ammoSpan) {
-                    const ammo = gameState.ammo[index];
-                    if (ammo > 0 || WEAPONS[index].name === "Pistol") {
-                        ammoSpan.textContent = ammo === 9999 ? 'INF' : ammo;
-                        ammoSpan.style.color = ammo <= 5 && ammo !== 9999 ? '#f00' : '#fff';
-                    } else {
-                        ammoSpan.textContent = '0';
-                    }
-                }
-            });
-        }
-        
-        function addScore(points, worldPosition) {
-            score += points;
-            scoreDisplay.innerText = score;
-            playSound('score');
-            const div = document.createElement('div');
-            div.className = 'floating-score'; div.innerText = `+${points}`;
-            document.body.appendChild(div);
-            const tempV = worldPosition.clone().project(camera);
-            const x = (tempV.x * .5 + .5) * window.innerWidth;
-            const y = (-(tempV.y * .5) + .5) * window.innerHeight;
-            div.style.left = `${x}px`; div.style.top = `${y}px`;
-            setTimeout(() => div.remove(), 1000);
-        }
-
-        function takeDamage(amount) {
-            if (isDead) return;
-            playerHealth -= amount;
-            if (playerHealth <= 0) { playerHealth = 0; die(); }
-            healthBar.style.width = playerHealth + '%';
-            damageOverlay.style.opacity = 1;
-            setTimeout(() => damageOverlay.style.opacity = 0, 100);
-        }
-
-        function arrestPlayer() {
-            if (isDead) return;
-            
-            if (gameState.currentVehicle) exitVehicle();
-
-            isDead = true; 
-            controls.unlock();
-            gameState.mode = 'ARRESTED';
-            updateHUD();
-
-            camera.position.set(JAIL_POS.x, 2, JAIL_POS.z);
-            velocity.set(0, 0, 0);
-            canJump = false;
-
-            wastedScreen.querySelector('div:first-child').innerText = 'ARRESTED';
-            wastedScreen.querySelector('div:last-child').innerText = 'Serve your time... (Click to escape/respawn)';
-            wastedScreen.style.display = 'flex';
-            
-            stopCarSound();
-            playSound('die');
-
-            logDebug("Player arrested and jailed.");
-        }
-
-        function die() {
-            isDead = true;
-            controls.unlock();
-            wastedScreen.querySelector('div:first-child').innerText = 'GRID FAILED';
-            wastedScreen.querySelector('div:last-child').innerText = 'Click to Re-Initialize';
-            wastedScreen.style.display = 'flex';
-            stopCarSound();
-        }
-
-        function respawn() {
-            isDead = false;
-            playerHealth = 100;
-            healthBar.style.width = '100%';
-            wastedScreen.style.display = 'none';
-            
-            if (gameState.currentVehicle) exitVehicle();
-
-            camera.position.set(0, 2, 0); // Respawn at world origin
-            gameState.mode = 'walking'; // Ensure mode is reset
-            controls.lock();
-        }
-
-        function updateHUD() {
-            modeDisplay.innerText = gameState.mode.toUpperCase();
-            npcDisplay.innerText = npcs.length;
-        }
-
-        function showMessage(t) {
-            messageBox.innerText = t;
-            messageBox.style.opacity = 1;
-            setTimeout(() => messageBox.style.opacity = 0, 2000);
-        }
-        
-        function getHitEntity(hitObject) {
-            let t = hitObject;
-            while (t && t.parent && t !== scene) {
-                if (t.userData && t.userData.type === 'npc') return t;
-                t = t.parent;
-            }
-            return null;
-        }
-
-        function createExplosion(pos, scale=1) {
-            const now = performance.now();
-            if (now - lastExplosionTime < 50) return; // FIX: Rate limit explosion sound to 50ms
-            lastExplosionTime = now;
-
-            playSound('explosion');
-            // Explosion is a quickly expanding wireframe sphere
-            const geo = new THREE.SphereGeometry(3 * scale, 12, 12);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.8, wireframe: true, wireframeLinewidth: 2 });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.copy(pos);
-            scene.add(mesh);
-            particles.push({ mesh: mesh, life: 0.3, type: 'blast', maxScale: 3 * scale });
-
-            const range = 15 * scale;
-            
-            // Apply explosion force/damage to NPCs
-            for (let i = npcs.length - 1; i >= 0; i--) {
-                const n = npcs[i];
-                if (!n.position || n.userData.dead) continue;
-                const d = n.position.distanceTo(pos);
-                if(d < range) { damageNPC(n, 200); const dir = n.position.clone().sub(pos).normalize(); n.position.add(dir.multiplyScalar(2)); }
-            }
-            
-            // Safely check and remove pickups hit by explosion
-            for (let i = pickups.length - 1; i >= 0; i--) {
-                const p = pickups[i];
-                if (!p.mesh || !p.mesh.position) continue;
-                if (p.mesh.position.distanceTo(pos) < range) {
-                    scene.remove(p.mesh);
-                    pickups.splice(i, 1);
-                }
-            }
-
-            // Safely damage nearby cars 
-            for (let i = cars.length - 1; i >= 0; i--) {
-                const c = cars[i];
-                if (!c.position) continue;
-                const d = c.position.distanceTo(pos);
-                if(d < range) { 
-                    const dir = c.position.clone().sub(pos).normalize(); 
-                    c.position.add(dir.multiplyScalar(2)); // Push away
-                    c.userData.velocity += 10;
-                    const carIndex = cars.indexOf(c);
-                    if (carIndex !== -1) damageCar(c, 50, carIndex); // Apply explosion damage
-                }
-            }
-        }
-
-        function createFire(pos) {
-            playSound('explosion');
-            // Fire is an animated, expanding wireframe
-            const geo = new THREE.SphereGeometry(3, 8, 8);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.6, wireframe: true, wireframeLinewidth: 1 });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.copy(pos);
-            scene.add(mesh);
-            particles.push({ mesh: mesh, life: 4.0, type: 'fire' });
-        }
-        
-        function createCarHealthBar() {
-             const healthDiv = document.createElement('div');
-             healthDiv.className = 'entity-health-bar';
-             healthDiv.innerHTML = '<div class="entity-health-fill" style="width:100%;"></div>';
-             document.getElementById('ui-layer').appendChild(healthDiv);
-             return healthDiv;
-        }
-
-        function damageCar(car, dmg, index) {
-            car.userData.health -= dmg;
-            const percent = Math.max(0, car.userData.health) / car.userData.maxHealth;
-
-            // Update UI health bar
-            if (car.userData.healthBar) {
-                const fill = car.userData.healthBar.querySelector('.entity-health-fill');
-                if (fill) {
-                    fill.style.width = percent * 100 + '%';
-                    fill.style.background = percent > 0.3 ? '#00ff00' : '#ff0000';
-                }
-            }
-            
-            if (car.userData.health <= 0) {
-                logDebug(`Car destroyed: ${index}`);
-                if (car === gameState.currentVehicle) {
-                    exitVehicle(); 
-                    takeDamage(100); 
-                }
-                
-                createExplosion(car.position, 4);
-                
-                scene.remove(car);
-                if (car.userData.healthBar) car.userData.healthBar.remove();
-                
-                if (index !== undefined && index >= 0 && index < cars.length) {
-                    cars.splice(index, 1);
-                }
-            }
-        }
-
-        function damageNPC(npc, dmg) {
-            if (npc.userData.dead) return;
-            npc.userData.health -= dmg;
-            
-            const percent = Math.max(0, npc.userData.health) / 100;
-            if (npc.userData.healthBar) {
-                const fill = npc.userData.healthBar.querySelector('.entity-health-fill');
-                if (fill) {
-                    fill.style.width = percent * 100 + '%';
-                    fill.style.background = percent > 0.3 ? '#00ff00' : '#ff0000';
-                }
-            }
-
-            npc.children.forEach(m => { if(m.material && m.material.color) m.material.color.setHex(0xffffff); });
-            setTimeout(() => { 
-                if(npc.parent) {
-                    const defaultColor = npc.userData.isCop ? 0xff00ff : (npc.userData.isGang ? 0xff0000 : 0x00ff00);
-                    npc.children.forEach(m => { if(m.material && m.material.color) m.material.color.setHex(defaultColor); }); 
-                }
-            }, 100);
-
-            if (npc.userData.health <= 0) {
-                npc.userData.dead = true;
-                playSound('die');
-                addScore(dmg >= 100 ? 100 : 50, npc.position);
-                
-                if (npc.userData.healthBar) npc.userData.healthBar.remove();
-                
-                const i = npcs.indexOf(npc); if (i > -1) npcs.splice(i, 1);
-                updateHUD();
-                
-                // NPC Death Animation (fall over and sink)
-                const k = setInterval(() => {
-                    if (!npc.parent) return clearInterval(k);
-                    npc.rotation.x += 0.1; npc.position.y -= 0.1;
-                    if (npc.rotation.x > Math.PI/2) {
-                        clearInterval(k); 
-                        scene.remove(npc);
-                    }
-                }, 16);
-            }
-        }
-
-        function isPlayerVehicle(vehicle) {
-            return gameState.currentVehicle === vehicle && gameState.mode === 'car';
-        }
-
-        function enterVehicle(vehicle) {
-            try {
-                vehicle.userData.velocity = 0; 
-                vehicle.userData.ai.active = false; 
-                
-                gameState.currentVehicle = vehicle;
-                gameState.mode = vehicle.userData.type;
-                
-                stopCarSound();
-                startCarSound();
-                
-                controls.unlock();
-                vehicle.add(camera); 
-                camera.position.set(0, 4, -8);
-                camera.rotation.set(0, Math.PI, 0);
-                
-                if (gunMesh) gunMesh.visible = false;
-                document.getElementById('crosshair').style.display = 'none';
-                showMessage(`Entered CAR`); updateHUD(); 
-                controls.lock(); 
-                
-            } catch(e) {
-                logDebug(`ENTER VEHICLE CRASH: ${e.message}`);
-                gameState.mode = 'walking';
-                gameState.currentVehicle = null;
-                scene.add(camera);
-                controls.lock();
-            }
-        }
-
-        function exitVehicle() {
-            if (!gameState.currentVehicle || !gameState.currentVehicle.position) {
-                 logDebug("EXIT VEHICLE FAILED: Current vehicle null or position undefined.");
-                 gameState.mode = 'walking';
-                 gameState.currentVehicle = null;
-                 controls.lock();
-                 return;
-            }
-            
-            const vehicle = gameState.currentVehicle; 
-            
-            stopCarSound(); 
-
-            vehicle.userData.velocity = 0;
-            vehicle.userData.ai.active = true;
-            
-            scene.add(camera); 
-            
-            const exitPos = vehicle.matrixWorld ? new THREE.Vector3(3, 0, 0).applyMatrix4(vehicle.matrixWorld) : vehicle.position.clone().add(new THREE.Vector3(3, 0, 0));
-            camera.position.copy(exitPos); camera.position.y = 2; camera.rotation.set(0, 0, 0);
-            
-            gameState.mode = 'walking'; gameState.currentVehicle = null;
-            if (gunMesh) gunMesh.visible = true;
-            document.getElementById('crosshair').style.display = 'block';
-            showMessage("On Foot"); updateHUD();
-        }
-
-        function interact() {
-            if (gameState.mode === 'walking') {
-                let closest = null, dist = 15; 
-                cars.forEach(v => {
-                    const d = camera.position.distanceTo(v.position);
-                    if (d < dist) { dist = d; closest = v; }
-                });
-                if (closest) enterVehicle(closest);
-                else {
-                    showMessage("Nothing to interact with.");
-                }
-            } else {
-                exitVehicle();
-            }
-        }
-
-        function toggleMap() {
-            isMapOpen = !isMapOpen;
-            if (isMapOpen) { fullMapLayer.style.display = 'flex'; controls.unlock(); drawFullMap(); } else { fullMapLayer.style.display = 'none'; controls.lock(); }
-        }
-
-        function onKeyDown(e) {
-            if (isDead) return;
-            if (e.code === 'KeyM') toggleMap();
-            switch(e.code) {
-                case 'KeyW': moveForward = true; break;
-                case 'KeyS': moveBackward = true; break;
-                case 'KeyA': moveLeft = true; break;
-                case 'KeyD': moveRight = true; break;
-                case 'Space': 
-                    if (gameState.mode === 'walking' && canJump) { velocity.y += 25; canJump = false; }
-                    else if (gameState.mode !== 'walking' && gameState.currentVehicle) gameState.currentVehicle.userData.velocity *= 0.9;
-                    break;
-                case 'KeyE': interact(); break;
-                case 'Digit1': switchWeapon(0); break;
-                case 'Digit2': switchWeapon(1); break;
-                case 'Digit3': switchWeapon(2); break;
-                case 'Digit4': switchWeapon(3); break;
-                case 'Digit5': switchWeapon(4); break;
-            }
-        }
-        function onKeyUp(e) {
-            switch(e.code) { case 'KeyW': moveForward = false; break; case 'KeyS': moveBackward = false; break; case 'KeyA': moveLeft = false; break; case 'KeyD': moveRight = false; break; }
-        }
-        function onScroll(e) {
-            if (isDead) return;
-            const dir = e.deltaY > 0 ? 1 : -1;
-            let next = gameState.currentWeaponIdx;
-            for(let i=0; i<5; i++) {
-                next += dir; if(next>4) next=0; if(next<0) next=4;
-                if(gameState.inventory[next]) { switchWeapon(next); break; }
-            }
-        }
-        function switchWeapon(index) {
-            if (gameState.inventory[index]) {
-                gameState.currentWeaponIdx = index;
-                updateWeaponUI();
-            } else {
-                showMessage(`Weapon slot ${index+1} is locked.`);
-            }
-        }
-
-        function fireWeapon() {
-            const weapon = WEAPONS[gameState.currentWeaponIdx];
-            if (gameState.ammo[gameState.currentWeaponIdx] <= 0 && weapon.name !== "Pistol") { showMessage("No Ammo!"); return; }
-            if (weapon.name !== "Pistol") { gameState.ammo[gameState.currentWeaponIdx]--; updateWeaponUI(); }
-            
-            if (gunMesh) {
-                gunMesh.position.z += 0.2; gunMesh.rotation.x += 0.1;
-                muzzleFlashLight.intensity = 5; setTimeout(() => muzzleFlashLight.intensity = 0, 50);
-            }
-            
-            if (weapon.type === 'raycast') {
-                playSound('shoot');
-                raycaster.setFromCamera(new THREE.Vector2(), camera);
-                const intersects = raycaster.intersectObjects(scene.children, true);
-                for (let hit of intersects) {
-                    const npc = getHitEntity(hit.object);
-                    if (npc) { damageNPC(npc, weapon.damage); return; } 
-                    
-                    if (hit.distance < 100 && hit.object !== gunMesh && hit.object !== camera) break;
-                }
-            } else {
-                playSound(weapon.type === 'rocket' ? 'explosion' : 'shoot'); 
-                const ball = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: weapon.color }));
-                ball.position.copy(camera.position.clone().add(new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion)));
-                const vel = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).multiplyScalar(weapon.name === 'Rocket' ? 50 : 20); 
-                if (weapon.type === 'throw') vel.y += 5;
-                scene.add(ball);
-                projectiles.push({ mesh: ball, velocity: vel, type: weapon.type, life: 5.0 });
-            }
-        }
-        
-        // --- INIT ---
-        try {
-            init();
-        } catch (e) {
-            logDebug(`INIT CRASH: ${e.message}`);
-            document.getElementById('loading').innerText = "FATAL ERROR: See Debug Log.";
-        }
-
-        function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(CONFIG.fogColor);
-            scene.fog = new THREE.FogExp2(CONFIG.fogColor, 0.0007); 
-
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 8000);
-            camera.position.set(0, 2, 0);
-
-            const ambient = new THREE.AmbientLight(0xffffff, 0.1); scene.add(ambient);
-            
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = false; 
-            document.getElementById('canvas-container').appendChild(renderer.domElement);
-            
-            controls = new PointerLockControls(camera, document.body);
-            blocker.addEventListener('click', () => { controls.lock(); resumeAudio(); });
-            controls.addEventListener('lock', () => { instructions.style.display = 'none'; blocker.style.display = 'none'; });
-            controls.addEventListener('unlock', () => { 
-                if (!isMapOpen && !isDead) { 
-                    blocker.style.display = 'flex'; instructions.style.display = 'block';
-                    moveForward = false; moveBackward = false; moveLeft = false; moveRight = false; isFiring = false;
-                    stopCarSound();
-                }
-            });
-
-            wastedScreen.addEventListener('click', respawn);
-            document.addEventListener('keydown', onKeyDown); document.addEventListener('keyup', onKeyUp);
-            document.addEventListener('mousedown', () => isFiring = true); document.addEventListener('mouseup', () => isFiring = false);
-            document.addEventListener('wheel', onScroll); window.addEventListener('resize', onWindowResize);
-            // NEW: Add click listener to the full map canvas
-            fullMapCanvas.addEventListener('click', onFullMapClick);
-
-            raycaster = new THREE.Raycaster();
-
-            // Generate World
-            createSky();
-            createGround();
-            createCity();
-            createJail(); 
-            createGun();
-            spawnNPCs();
-            spawnCars();
-            spawnPickups();
-            spawnHearts();
-
-            loadingText.style.display = 'none';
-            blocker.style.display = 'flex';
-            updateWeaponUI(); 
-            animate();
-        }
-
-        // --- GENERATION (World) ---
-        function createSky() {
-            const geo = new THREE.BufferGeometry();
-            const pos = new Float32Array(2000 * 3);
-            for (let i = 0; i < 2000; i++) {
-                const r = 1000 + Math.random() * 500;
-                const theta = 2 * Math.PI * Math.random();
-                const phi = Math.acos(2 * Math.random() - 1);
-                pos[i*3] = r * Math.sin(phi) * Math.cos(theta);
-                pos[i*3+1] = Math.max(400, r * Math.sin(phi) * Math.sin(theta)); 
-                pos[i*3+2] = r * Math.cos(phi);
-            }
-            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-            scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 2, fog: false })));
-        }
-        
-        function createGround() {
-            const geo = new THREE.PlaneGeometry(CONFIG.citySize * 2, CONFIG.citySize * 2, CONFIG.citySize/5, CONFIG.citySize/5);
-            geo.rotateX(-Math.PI / 2);
-            
-            const mat = new THREE.MeshBasicMaterial({ color: CONFIG.groundColor, wireframe: true });
-            
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.y = 0.01; 
-            scene.add(mesh);
-        }
-
-        function createJail() {
-            const h = 15;
-            const s = 10;
-            const wallMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, wireframeLinewidth: 3 }); 
-            const interiorMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true, wireframeLinewidth: 5 }); 
-
-            const geo = new THREE.BoxGeometry(s, h, s);
-            const mesh = new THREE.Mesh(geo, wallMat);
-            mesh.position.copy(JAIL_POS);
-            mesh.position.y = h/2;
-            scene.add(mesh);
-            
-            const box = new THREE.Box3().setFromObject(mesh);
-            colliders.push(box); 
-
-            const cellGeo = new THREE.BoxGeometry(s - 0.5, h - 0.5, s - 0.5);
-            const cell = new THREE.Mesh(cellGeo, interiorMat);
-            cell.position.copy(JAIL_POS);
-            cell.position.y = h/2;
-            scene.add(cell);
-        }
-
-        function createCity() {
-            for (let x = -CONFIG.citySize/2; x < CONFIG.citySize/2; x += CONFIG.blockSize) {
-                for (let z = -CONFIG.citySize/2; z < CONFIG.citySize/2; z += CONFIG.blockSize) {
-                    const jailXMin = JAIL_POS.x - CONFIG.blockSize / 2;
-                    const jailXMax = JAIL_POS.x + CONFIG.blockSize / 2;
-                    const jailZMin = JAIL_POS.z - CONFIG.blockSize / 2;
-                    const jailZMax = JAIL_POS.z + CONFIG.blockSize / 2;
-                    if (x > jailXMin && x < jailXMax && z > jailZMin && z < jailZMax) continue;
-
-                    if (Math.abs(x) < 100 && Math.abs(z) < 100) continue;
-                    createBuilding(x + CONFIG.blockSize/2 + CONFIG.cityOffset, z + CONFIG.blockSize/2);
-                }
-            }
-        }
-
-        function createBuilding(x, z) {
-            const w = CONFIG.blockSize - CONFIG.roadWidth;
-            const h = Math.random() * 80 + 20;
-            const grp = new THREE.Group();
-            
-            const neonColor = CONFIG.neonColors[Math.floor(Math.random() * CONFIG.neonColors.length)];
-            const mat = new THREE.MeshBasicMaterial({ 
-                color: neonColor, 
-                wireframe: true,
-                wireframeLinewidth: 1.5
-            });
-            
-            let currentHeight = 0;
-            let currentWidth = w;
-            const minW = w * 0.4;
-            
-            while (currentHeight < h) {
-                const segmentHeight = Math.min(15 + Math.random() * 25, h - currentHeight);
-                
-                const geo = new THREE.BoxGeometry(currentWidth, segmentHeight, currentWidth);
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.position.set(0, currentHeight + segmentHeight / 2, 0);
-                grp.add(mesh);
-                
-                currentHeight += segmentHeight;
-                currentWidth *= (0.8 + Math.random() * 0.2); 
-                currentWidth = Math.max(currentWidth, minW);
-
-                if (currentWidth < minW * 1.5 && h - currentHeight > 10) {
-                    const spireGeo = new THREE.CylinderGeometry(1, 1, h - currentHeight + 5, 8);
-                    const spire = new THREE.Mesh(spireGeo, mat);
-                    spire.position.set(0, currentHeight + (h - currentHeight) / 2, 0);
-                    grp.add(spire);
-                    currentHeight = h;
-                }
-            }
-            
-            grp.position.set(x, 0, z);
-            scene.add(grp);
-            
-            const box = new THREE.Box3().setFromObject(grp);
-            colliders.push(box);
-        }
-
-        function createGun() {
-            const gunGroup = new THREE.Group();
-            const mat = new THREE.MeshBasicMaterial({ color: 0x333333, wireframe: true, wireframeLinewidth: 2 });
-            const barrelMat = new THREE.MeshBasicMaterial({ color: 0x666666, wireframe: true, wireframeLinewidth: 2 });
-            
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.25, 1.2), mat); body.position.set(0, 0.1, -0.6); gunGroup.add(body);
-            const grip = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.3), mat); grip.position.set(0, -0.35, -0.2); grip.rotation.x = 0.2; gunGroup.add(grip);
-            const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.15), mat); magazine.position.set(0, -0.6, -0.2); gunGroup.add(magazine);
-            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8), barrelMat); barrel.position.set(0, 0.1, -1.2); barrel.rotation.x = Math.PI/2; gunGroup.add(barrel);
-            const scope = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.4), barrelMat); scope.position.set(0, 0.25, -0.7); gunGroup.add(scope);
-
-            gunGroup.position.set(0.4, -0.4, -0.6); camera.add(gunGroup); gunMesh = gunGroup; scene.add(camera);
-            muzzleFlashLight = new THREE.PointLight(0x00ffff, 0, 10); muzzleFlashLight.position.set(0, 0.1, -1.4); gunGroup.add(muzzleFlashLight);
-        }
-
-        function spawnPickups() {
-            const geo = new THREE.BoxGeometry(1, 1, 1);
-            
-            for(let i=0; i<CONFIG.pickupCount; i++) {
-                const wId = Math.floor(Math.random() * 4) + 1; 
-                const wData = WEAPONS[wId];
-                const pMat = new THREE.MeshBasicMaterial({ color: wData.color, wireframe: true, wireframeLinewidth: 3 }); 
-                
-                const mesh = new THREE.Mesh(geo, pMat);
-                const x = (Math.random() - 0.5) * CONFIG.citySize * 0.8;
-                const z = (Math.random() - 0.5) * CONFIG.citySize * 0.8;
-                mesh.position.set(x, 1.5, z);
-                
-                scene.add(mesh);
-                pickups.push({ mesh: mesh, type: 'weapon', wId: wId });
-            }
-        }
-
-        function spawnHearts() {
-            const heartShape = new THREE.Shape();
-            heartShape.moveTo(0.25, 0.25); heartShape.bezierCurveTo(0.25, 0.25, 0.20, 0, 0, 0); heartShape.bezierCurveTo(-0.30, 0, -0.30, 0.35, -0.30, 0.35);
-            heartShape.bezierCurveTo(-0.30, 0.55, -0.10, 0.77, 0.25, 0.95); heartShape.bezierCurveTo(0.60, 0.77, 0.80, 0.55, 0.80, 0.35);
-            heartShape.bezierCurveTo(0.80, 0.35, 0.80, 0, 0.50, 0); heartShape.bezierCurveTo(0.35, 0, 0.25, 0.25, 0.25, 0.25);
-
-            const geo = new THREE.ExtrudeGeometry(heartShape, { depth: 0.2, bevelEnabled: false });
-            geo.center();
-            const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, wireframeLinewidth: 3 });
-
-            for (let i = 0; i < CONFIG.heartCount; i++) {
-                const mesh = new THREE.Mesh(geo, mat);
-                const x = (Math.random() - 0.5) * CONFIG.citySize * 0.8;
-                const z = (Math.random() - 0.5) * CONFIG.citySize * 0.8;
-                mesh.position.set(x, 1.5, z);
-                mesh.rotation.z = Math.PI; mesh.scale.set(1.5, 1.5, 1.5);
-                
-                scene.add(mesh);
-                pickups.push({ mesh: mesh, type: 'health' });
-            }
-        }
-
-        function spawnNPCs() {
-            for (let i = 0; i < CONFIG.npcCount; i++) { spawnSingleNPC(false); } 
-            for (let i = 0; i < CONFIG.copCount; i++) { spawnSingleNPC(true); } 
-            updateHUD();
-        }
-
-        function spawnSingleNPC(isCop = false) {
-            const grp = new THREE.Group();
-            const isGang = !isCop && Math.random() < 0.3;
-            
-            const copMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true, wireframeLinewidth: 1.5 }); 
-            const gangMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, wireframeLinewidth: 1 }); 
-            const civMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, wireframeLinewidth: 1 }); 
-            const mat = isCop ? copMat : (isGang ? gangMat : civMat);
-
-            const bodyGeo = new THREE.BoxGeometry(1.2, 1.8, 0.8);
-            const body = new THREE.Mesh(bodyGeo, mat);
-            body.position.y = 1.0; grp.add(body);
-
-            const headGeo = new THREE.IcosahedronGeometry(0.5, 0); 
-            const head = new THREE.Mesh(headGeo, mat);
-            head.position.y = 2.2; grp.add(head);
-
-            const shoulderGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-            const shoulderL = new THREE.Mesh(shoulderGeo, mat); shoulderL.position.set(-0.75, 1.5, 0); grp.add(shoulderL);
-            const shoulderR = new THREE.Mesh(shoulderGeo, mat); shoulderR.position.set(0.75, 1.5, 0); grp.add(shoulderR);
-
-            const legGeo = new THREE.BoxGeometry(0.4, 1.0, 0.4);
-            const legL = new THREE.Mesh(legGeo, mat); legL.position.set(-0.3, 0.0, 0); grp.add(legL);
-            const legR = new THREE.Mesh(legGeo, mat); legR.position.set(0.3, 0.0, 0); grp.add(legR);
-            
-            if (isGang) {
-                const gGeo = new THREE.BoxGeometry(0.1, 0.1, 0.4);
-                const gMesh = new THREE.Mesh(gGeo, new THREE.MeshBasicMaterial({color:0xff00ff, wireframe: true})); 
-                gMesh.position.set(0.7, 1.5, 0.5); grp.add(gMesh);
-            }
-
-            let x, z;
-            x = (Math.random() - 0.5) * CONFIG.citySize * 0.8; 
-            z = (Math.random() - 0.5) * CONFIG.citySize * 0.8;
-
-            if (x > 0 && x < 20 && z > 0 && z < 20) { x += 50; z += 50; } 
-            
-            grp.position.set(x, 0, z); 
-            grp.userData = { 
-                health: 100, 
-                dir: new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize(), 
-                speed: isCop ? (3 + Math.random() * 4) * CONFIG.copSpeedMultiplier : 3 + Math.random() * 4, 
-                timer: 0, 
-                isGang: isGang, 
-                isCop: isCop, 
-                attackTimer: 0, 
-                type: 'npc'
-            };
-            
-            const healthDiv = document.createElement('div');
-            healthDiv.className = 'entity-health-bar'; 
-            healthDiv.innerHTML = '<div class="entity-health-fill" style="width:100%;"></div>';
-            document.getElementById('ui-layer').appendChild(healthDiv);
-            grp.userData.healthBar = healthDiv;
-
-
-            scene.add(grp); npcs.push(grp);
-        }
-
-        function spawnCars() {
-            for (let i = 0; i < CONFIG.carCount; i++) {
-                const grp = createBaseVehicle(3.5, 1, 6);
-                let bx = Math.round((Math.random() - 0.5) * 4) * CONFIG.blockSize;
-                let bz = Math.round((Math.random() - 0.5) * 4) * CONFIG.blockSize;
-                grp.position.set(bx + 50, 0.5, bz);
-                grp.userData.type = 'car';
-                grp.userData.velocity = 0; 
-                grp.userData.ai = { active: Math.random() > 0.3, speed: 15 + Math.random() * 15, turnTimer: 0, state: 'forward' };
-                if(Math.random() > 0.5) { grp.rotation.y = Math.PI/2; }
-                
-                grp.userData.health = 100;
-                grp.userData.maxHealth = 100;
-                grp.userData.healthBar = createCarHealthBar();
-
-                scene.add(grp); cars.push(grp);
-            }
-        }
-        
-        function createBaseVehicle(w, h, d) {
-            const grp = new THREE.Group();
-            const colorVal = CONFIG.neonColors[Math.floor(Math.random()*CONFIG.neonColors.length)];
-            
-            const bodyMat = new THREE.MeshBasicMaterial({ color: colorVal, wireframe: true, wireframeLinewidth: 2 });
-            const windowMat = new THREE.MeshBasicMaterial({ color: 0x333333, wireframe: true });
-
-            const halfW = w / 2;
-            const halfD = d / 2;
-            const rearH = h;
-            const frontH = h * 0.5;
-
-            const vertices = new Float32Array([
-                -halfW, frontH, halfD,   
-                 halfW, frontH, halfD,   
-                 halfW, 0, halfD,       
-                -halfW, 0, halfD,       
-                
-                -halfW, rearH, -halfD,  
-                 halfW, rearH, -halfD,  
-                 halfW, 0, -halfD,      
-                -halfW, 0, -halfD,      
-                
-                 halfW, frontH, halfD,  
-                -halfW, frontH, halfD,  
-                -halfW, rearH, -halfD, 
-                 halfW, rearH, -halfD,  
-
-            ]);
-            
-            const indices = [
-                3, 2, 7,
-                7, 2, 6,
-                4, 5, 7,
-                7, 5, 6,
-                0, 3, 7,
-                7, 4, 0,
-                1, 5, 6,
-                6, 2, 1,
-                1, 5, 4,
-                4, 0, 1,
-                0, 1, 2,
-                2, 3, 0,
-            ];
-
-            const geo = new THREE.PolyhedronGeometry(vertices, indices);
-            
-            geo.translate(0, rearH / 2, 0); 
-            
-            const body = new THREE.Mesh(geo, bodyMat);
-            body.position.y = 0.5; 
-            grp.add(body);
-
-            const cabin = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, h * 0.8, d * 0.4), windowMat);
-            cabin.position.set(0, 1.9, -d * 0.1); grp.add(cabin);
-
-            const headLightMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
-            const headLight = new THREE.Mesh(new THREE.BoxGeometry(w/6, h/3, 0.1), headLightMat);
-            headLight.position.set(-w/2.5, frontH, halfD + 0.05); grp.add(headLight); grp.add(headLight.clone().translateX(w/1.25));
-            const tailLightMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-            const tailLight = new THREE.Mesh(new THREE.BoxGeometry(w/6, h/3, 0.1), tailLightMat);
-            tailLight.position.set(-w/2.5, rearH, -halfD - 0.05); grp.add(tailLight); grp.add(tailLight.clone().translateX(w/1.25));
-            
-            return grp;
-        }
-
-        // --- ANIMATION LOOP ---
-
-        function animate() {
-            try {
-                requestAnimationFrame(animate);
-                const t = performance.now();
-                const dt = Math.min((t - prevTime) / 1000, 0.1);
-                prevTime = t;
-
-                if (isMapOpen) { drawFullMap(); }
-
-                if (isNaN(camera.position.x) || isNaN(camera.position.y) || isNaN(camera.position.z)) {
-                    logDebug("FATAL: Camera position is NaN. Respawning.");
-                    respawn(); 
-                    return; 
-                }
-
-                if (!controls.isLocked && !isDead && !isMapOpen) return;
-                
-                const cameraWorldPos = new THREE.Vector3();
-                camera.getWorldPosition(cameraWorldPos);
-                
-                // --- UI HEALTH BAR POSITIONING (NPCs and Cars) ---
-
-                const entities = [...npcs, ...cars];
-                for (let i = entities.length - 1; i >= 0; i--) {
-                    const entity = entities[i];
-                    if (!entity.parent || entity.userData.dead || !entity.position || !entity.userData.healthBar) {
-                        if (entity.userData.healthBar) entity.userData.healthBar.remove();
-                        continue;
-                    }
-
-                    const ePos = entity.position.clone();
-                    ePos.y += 3.5; 
-                    const screenPos = ePos.project(camera);
-                    
-                    const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-                    const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
-                    
-                    const bar = entity.userData.healthBar;
-                    if (screenPos.z < 1 && camera.position.distanceTo(entity.position) < 200) { 
-                        bar.style.display = 'block';
-                        bar.style.left = `${x}px`;
-                        bar.style.top = `${y}px`;
-                    } else {
-                        bar.style.display = 'none';
-                    }
-                }
-                
-                // Pickups
-                for (let i = pickups.length - 1; i >= 0; i--) {
-                    const p = pickups[i];
-                    if (!p || !p.mesh || !p.mesh.position) { pickups.splice(i, 1); continue; } 
-
-                    p.mesh.rotation.y += dt; 
-                    p.mesh.position.y = 1.5 + Math.sin(t * 0.003) * 0.2;
-                    
-                    if (cameraWorldPos.distanceTo(p.mesh.position) < 2.0) {
-                        if (p.type === 'weapon') {
-                            playSound('pickup');
-                            gameState.inventory[p.wId] = true; gameState.ammo[p.wId] += 15; 
-                            scene.remove(p.mesh); pickups.splice(i, 1); updateWeaponUI();
-                            showMessage(`Acquired ${WEAPONS[p.wId].name} Module!`);
-                        } else if (p.type === 'health') {
-                            if (playerHealth < 100) {
-                                playSound('heal');
-                                playerHealth = Math.min(100, playerHealth + 25);
-                                healthBar.style.width = playerHealth + '%';
-                                scene.remove(p.mesh); pickups.splice(i, 1);
-                                showMessage("Health Matrix Repaired!");
-                            }
-                        }
-                    }
-                }
-
-
-                // Projectiles, Particles
-                for (let i = projectiles.length - 1; i >= 0; i--) {
-                    const p = projectiles[i]; p.life -= dt;
-                    if (!p.mesh || !p.mesh.position) { projectiles.splice(i, 1); continue; } 
-                    
-                    p.mesh.position.addScaledVector(p.velocity, dt);
-                    if (p.type === 'throw') p.velocity.y -= 9.8 * dt;
-
-                    let hit = false;
-                    if (p.mesh.position.y < 0) hit = true;
-                    if (!hit) { for(let b of colliders) if(b.containsPoint(p.mesh.position)) { hit = true; break; } }
-                    
-                    if (hit || p.life <= 0) {
-                        if (p.type === 'rocket' || p.type === 'throw') createExplosion(p.mesh.position, p.type === 'rocket' ? 2 : 1);
-                        if (p.type === 'throw' && WEAPONS[gameState.currentWeaponIdx].name === 'Molotov') createFire(p.mesh.position);
-                        scene.remove(p.mesh); projectiles.splice(i, 1);
-                    }
-                }
-                for (let i = particles.length - 1; i >= 0; i--) {
-                    const p = particles[i]; p.life -= dt;
-                    if(p.type === 'explosion' || p.type === 'blast') {
-                            p.mesh.scale.multiplyScalar(1.0 + dt * 4); p.mesh.material.opacity = p.life * 2;
-                    }
-                    if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
-                }
-                if (npcs.length < CONFIG.npcCount + CONFIG.copCount && Math.random() < 0.01) spawnSingleNPC(Math.random() < (CONFIG.copCount / (CONFIG.npcCount + CONFIG.copCount)));
-                
-                if (isDead) { renderer.render(scene, camera); return; } 
-
-                // Fire Rate Management
-                const activeWep = WEAPONS[gameState.currentWeaponIdx];
-                if (isFiring && controls.isLocked && gameState.mode === 'walking') {
-                    fireTimer -= dt;
-                    if (fireTimer <= 0) { fireWeapon(); fireTimer = activeWep.fireRate; if (!activeWep.auto) isFiring = false; }
-                } else { fireTimer = 0; }
-
-
-                // --- VEHICLE & MOVEMENT PHYSICS ---
-                
-                if (gameState.mode === 'walking') {
-                    velocity.x -= velocity.x * 10.0 * dt; velocity.z -= velocity.z * 10.0 * dt; velocity.y -= 9.8 * 60.0 * dt;
-                    direction.z = Number(moveForward) - Number(moveBackward); direction.x = Number(moveRight) - Number(moveLeft);
-                    direction.normalize();
-                    if (moveForward || moveBackward) velocity.z -= direction.z * 500.0 * dt;
-                    if (moveLeft || moveRight) velocity.x -= direction.x * 500.0 * dt;
-                    controls.moveRight(-velocity.x * dt); controls.moveForward(-velocity.z * dt); camera.position.y += velocity.y * dt;
-                    if (camera.position.y < 2) { velocity.y = 0; camera.position.y = 2; canJump = true; }
-
-                    const pRad = 0.8;
-                    for (let b of colliders) {
-                           if (camera.position.x > b.min.x - pRad && camera.position.x < b.max.x + pRad && camera.position.z > b.min.z - pRad && camera.position.z < b.max.z + pRad) {
-                               const cx = (b.min.x + b.max.x)/2; const cz = (b.min.z + b.max.z)/2;
-                               if (Math.abs(camera.position.x - cx) > Math.abs(camera.position.z - cz)) camera.position.x = camera.position.x - cx > 0 ? b.max.x + pRad : b.min.x - pRad;
-                               else camera.position.z = camera.position.z - cz > 0 ? b.max.z + pRad : b.min.z - pRad;
-                           }
-                    }
-                    if (gunMesh) { gunMesh.rotation.x = THREE.MathUtils.lerp(gunMesh.rotation.x, 0, 0.1); gunMesh.position.z = THREE.MathUtils.lerp(gunMesh.position.z, -0.8, 0.1); }
-                }
-                
-                // Driving (Car)
-                if (gameState.mode === 'car' && gameState.currentVehicle) {
-                    const c = gameState.currentVehicle;
-                    if (moveForward) c.userData.velocity += 60 * dt; if (moveBackward) c.userData.velocity -= 60 * dt;
-                    c.userData.velocity -= c.userData.velocity * 2.0 * dt;
-                    updateCarEngine(c.userData.velocity);
-                    if (Math.abs(c.userData.velocity) > 0.1) {
-                        const rot = 2.0 * dt * Math.sign(c.userData.velocity);
-                        if (moveLeft) c.rotation.y += rot; if (moveRight) c.rotation.y -= rot;
-                    }
-                    c.translateZ(c.userData.velocity * dt);
-                    
-                    const cRad = 2.5;
-                    for (let b of colliders) {
-                           if (b.min && b.max && c.position.x > b.min.x - cRad && c.position.x < b.max.x + cRad && c.position.z > b.min.z - cRad && c.position.z < b.max.z + cRad) {
-                               c.userData.velocity *= -0.5;
-                               damageCar(c, 5, cars.indexOf(c)); 
-                               const cx = (b.min.x + b.max.x)/2; const cz = (b.min.z + b.max.z)/2;
-                               if (Math.abs(c.position.x - cx) > Math.abs(c.position.z - cz)) c.position.x = c.position.x > cx ? b.max.x + cRad : b.min.x - cRad;
-                               else c.position.z = c.position.z > cz ? b.max.z + cRad : b.min.z - cRad;
-                           }
-                    }
-
-                    const isDangerous = Math.abs(c.userData.velocity) > 10;
-                    const distToPlayer = c.position.distanceTo(cameraWorldPos);
-                    
-                    if (!isPlayerVehicle(c) && isDangerous && distToPlayer < 1.0) {
-                        takeDamage(100);
-                    }
-                    
-                    if (Math.abs(c.userData.velocity) > 5) {
-                        for (let i = npcs.length - 1; i >= 0; i--) {
-                            const n = npcs[i];
-                            if (!n.userData.dead && n.position && n.position.distanceTo(c.position) < 5) damageNPC(n, 100);
-                        }
-                    }
-                }
-                
-                // --- CAR-TO-CAR COLLISION AND DAMAGE ---
-                const collisionDistance = 5;
-                const minCollisionSpeed = 10; 
-                
-                for (let i = cars.length - 1; i >= 0; i--) {
-                    const carA = cars[i];
-                    if (!carA.parent) continue; 
-                    
-                    for (let j = i - 1; j >= 0; j--) {
-                        const carB = cars[j];
-                        if (!carB.parent) continue; 
-
-                        const dist = carA.position.distanceTo(carB.position);
-                        
-                        if (dist < collisionDistance) {
-                            const speedA = Math.abs(carA.userData.velocity);
-                            const speedB = Math.abs(carB.userData.velocity);
-                            const relativeVelocity = speedA + speedB;
-
-                            if (relativeVelocity > minCollisionSpeed) { 
-                                const damage = Math.round(relativeVelocity * 2);
-                                
-                                damageCar(carB, damage, j);
-                                damageCar(carA, damage, i);
-
-                                // FIX: Check if both cars still exist in the scene *after* potential destruction
-                                if(carA.parent && carB.parent) {
-                                    carA.userData.velocity *= -0.5;
-                                    carB.userData.velocity *= -0.5;
-                                    
-                                    const dirAtoB = carB.position.clone().sub(carA.position).normalize();
-                                    const nudgeDistance = collisionDistance - dist + 0.1;
-                                    carA.position.addScaledVector(dirAtoB, -nudgeDistance * 0.5);
-                                    carB.position.addScaledVector(dirAtoB, nudgeDistance * 0.5);
-                                }
-                                
-                                break;
-                            }
-                        }
-                    }
-                }
-
-
-                // --- AI LOGIC ---
-                
-                // Car AI Loop
-                for (let i = cars.length - 1; i >= 0; i--) {
-                    const car = cars[i];
-                    if (!car.parent || !car.position || isPlayerVehicle(car) || !car.userData.ai.active) continue;
-
-                    const ai = car.userData.ai;
-                    let blocked = false;
-                    
-                    for(let b of colliders) {
-                        if (b.min && b.max && car.position.distanceTo(b.min) < 15) { blocked = true; break; }
-                    }
-
-                    if (ai.state === 'forward') {
-                        if (blocked) {
-                            ai.state = 'reverse';
-                            ai.turnTimer = 1.0;
-                        } else {
-                            car.translateZ(ai.speed * dt);
-                            ai.turnTimer -= dt;
-                            if (ai.turnTimer <= 0) {
-                                if (Math.random() > 0.6) car.rotation.y += Math.random() > 0.5 ? Math.PI/2 : -Math.PI/2;
-                                ai.turnTimer = 3.0;
-                            }
-                        }
-                    } else if (ai.state === 'reverse') {
-                        car.translateZ(-ai.speed * dt * 0.5);
-                        ai.turnTimer -= dt;
-                        if (ai.turnTimer <= 0) {
-                            car.rotation.y += Math.random() > 0.5 ? Math.PI/2 : -Math.PI/2;
-                            ai.state = 'forward';
-                            ai.turnTimer = 3.0;
-                        }
-                    }
-
-                    const l = CONFIG.citySize/2; 
-                    if (car.position.x > l || car.position.x < -l || car.position.z > l || car.position.z < -l) {
-                        car.rotation.y += Math.PI; 
-                        car.position.set(Math.min(l, Math.max(-l, car.position.x)), 0.5, Math.min(l, Math.max(-l, car.position.z)));
-                    }
-                }
-
-                // NPC Loop
-                for (let i = npcs.length - 1; i >= 0; i--) {
-                    const n = npcs[i];
-                    if (!n.parent || n.userData.dead || !n.position) continue; 
-                    
-                    // Cop Enforcement Behavior
-                    if (n.userData.isCop && !isDead) {
-                        const distToPlayer = n.position.distanceTo(cameraWorldPos);
-                        if (distToPlayer < 100) { 
-                            const targetDir = cameraWorldPos.clone().sub(n.position).normalize();
-                            n.userData.dir.lerp(targetDir, dt * 2); 
-                            
-                            n.lookAt(cameraWorldPos);
-                            
-                            if (distToPlayer < 2.0) { 
-                                arrestPlayer();
-                                continue;
-                            }
-                        }
-                    }
-                    
-                    // Gang Attack Behavior
-                    else if (n.userData.isGang && !isDead) {
-                        const distToPlayer = n.position.distanceTo(cameraWorldPos);
-                        if (distToPlayer < 40) {
-                            n.lookAt(cameraWorldPos);
-                            n.userData.attackTimer -= dt;
-                            if (n.userData.attackTimer <= 0) {
-                                playSound('enemyShoot');
-                                const flash = new THREE.PointLight(0xff00ff, 1, 5); flash.position.set(0.7, 1.5, 0.5); n.add(flash); setTimeout(() => n.remove(flash), 50);
-                                if (Math.random() > 0.3) { takeDamage(10); }
-                                n.userData.attackTimer = 1.5; 
-                            }
-                            continue; 
-                        }
-                    }
-
-                    n.userData.timer -= dt;
-                    if (n.userData.timer <= 0) { 
-                        n.userData.dir.set(Math.random()-0.5,0,Math.random()-0.5).normalize(); 
-                        n.userData.timer = Math.random()*4+1; 
-                    }
-                    
-                    n.position.addScaledVector(n.userData.dir, n.userData.speed * dt);
-                    n.lookAt(n.position.clone().add(n.userData.dir));
-
-                    // Collision 
-                    const nRad = 2.0;
-                    for (let b of colliders) {
-                           if (b.min && b.max && n.position.x > b.min.x-nRad && n.position.x < b.max.x+nRad && n.position.z > b.min.z-nRad && n.position.z < b.max.z+nRad) {
-                               const cx = (b.min.x + b.max.x)/2; const cz = (b.min.z + b.max.z)/2;
-                               const pushDir = n.position.clone().sub(new THREE.Vector3(cx, 0, cz)).normalize();
-                               n.position.addScaledVector(pushDir, 0.5); 
-                               n.userData.dir.set(Math.random()-0.5,0,Math.random()-0.5).normalize();
-                               n.userData.timer = 1.0; 
-                               break;
-                           }
-                    }
-                }
-
-                drawMinimap();
-                renderer.render(scene, camera);
-            } catch (e) {
-                logDebug(`RUNTIME CRASH: ${e.message}`);
-                if (renderer) renderer.setClearColor(0xff0000, 1);
-                document.getElementById('loading').innerText = "RUNTIME CRASH. See Debug Log.";
-                controls.unlock();
-            }
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        /**
-         * Converts 2D map click coordinates to 3D world coordinates (X, Z) and teleports the player.
-         * @param {MouseEvent} event 
-         */
-        function onFullMapClick(event) {
-            if (!isMapOpen) return;
-
-            const rect = fullMapCanvas.getBoundingClientRect();
-            const canvasX = event.clientX - rect.left;
-            const canvasY = event.clientY - rect.top;
-
-            const mapWidth = fullMapCanvas.width;
-            const mapHeight = fullMapCanvas.height;
-            const cityExtent = CONFIG.citySize;
-            
-            // Calculate map scale based on the smallest screen dimension used in drawFullMap
-            const minDim = Math.min(window.innerWidth, window.innerHeight);
-            const scale = (minDim - 100) / cityExtent; 
-
-            // Convert click coordinates relative to the center of the canvas
-            const clickXCentered = canvasX - (mapWidth / 2);
-            const clickYCentered = canvasY - (mapHeight / 2);
-
-            // Convert back to world coordinates using the inverse scale
-            // Note: The world Z axis corresponds to the map's Y axis (which is inverted in Canvas 2D usually, but handled by the scale factor)
-            const worldX = clickXCentered / scale;
-            const worldZ = clickYCentered / scale; 
-
-            // Apply Teleport
-            camera.position.set(worldX, 2, worldZ);
-            
-            showMessage(`Teleported to [${worldX.toFixed(0)}, ${worldZ.toFixed(0)}]`);
-            toggleMap(); // Close map and re-lock controls
-        }
-
-        // --- MAP DRAWING (Uses Canvas 2D) ---
-        function drawMinimap() {
-            const w = 200, h = 200;
-            minimapCtx.fillStyle = '#000'; minimapCtx.fillRect(0, 0, w, h);
-            minimapCtx.save(); minimapCtx.translate(w/2, h/2); minimapCtx.scale(0.5, 0.5);
-            const cPos = new THREE.Vector3(); camera.getWorldPosition(cPos);
-            minimapCtx.translate(-cPos.x, -cPos.z);
-
-            const cityExtent = CONFIG.citySize;
-            minimapCtx.strokeStyle = '#444';
-            minimapCtx.strokeRect(-cityExtent/2, -cityExtent/2, cityExtent, cityExtent); 
-            
-            minimapCtx.fillStyle = '#111'; 
-            for(let b of colliders) {
-                if (b.min && b.max) {
-                    minimapCtx.fillRect(b.min.x, b.min.z, b.max.x-b.min.x, b.max.z-b.min.z);
-                }
-            }
-
-            minimapCtx.fillStyle = '#ff00ff';
-            minimapCtx.fillRect(JAIL_POS.x - 5, JAIL_POS.z - 5, 10, 10);
-            
-            minimapCtx.fillStyle = '#ffaa00'; 
-            for(let p of pickups) { 
-                 if (p.mesh && p.mesh.position) {
-                     minimapCtx.beginPath(); minimapCtx.arc(p.mesh.position.x, p.mesh.position.z, 6, 0, Math.PI*2); minimapCtx.fill(); 
-                 }
-            }
-
-            for(let n of npcs) { 
-                if(!n.userData.dead && n.position) { 
-                    minimapCtx.fillStyle = n.userData.isCop ? '#ff00ff' : (n.userData.isGang ? '#f00' : '#0f0');
-                    minimapCtx.beginPath(); minimapCtx.arc(n.position.x, n.position.z, 5, 0, Math.PI*2); minimapCtx.fill(); 
-                } 
-            }
-            
-            minimapCtx.fillStyle = '#0ff'; 
-            for(let v of cars) { 
-                if (v.position) {
-                    minimapCtx.save(); minimapCtx.translate(v.position.x, v.position.z); minimapCtx.rotate(-v.rotation.y); 
-                    minimapCtx.fillRect(-3, -5, 6, 10); minimapCtx.restore(); 
-                }
-            }
-
-            minimapCtx.restore(); minimapCtx.save(); minimapCtx.translate(w/2, h/2);
-            const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
-            minimapCtx.rotate(Math.atan2(dir.x, dir.z));
-            minimapCtx.fillStyle = 'white'; minimapCtx.beginPath(); minimapCtx.moveTo(0, -8); minimapCtx.lineTo(6, 8); minimapCtx.lineTo(-6, 8); minimapCtx.fill();
-            minimapCtx.restore();
-        }
-
-        function drawFullMap() {
-            const w = window.innerWidth; const h = window.innerHeight;
-            fullMapCanvas.width = w; fullMapCanvas.height = h; fullMapCtx.fillStyle = '#000'; fullMapCtx.fillRect(0, 0, w, h);
-            fullMapCtx.save(); fullMapCtx.translate(w/2, h/2);
-            const minDim = Math.min(w, h); const cityExtent = CONFIG.citySize;
-            const scale = (minDim - 100) / cityExtent; 
-            fullMapCtx.scale(scale, scale);
-
-            fullMapCtx.strokeStyle = '#0ff';
-            fullMapCtx.strokeRect(-cityExtent/2, -cityExtent/2, cityExtent, cityExtent); 
-
-            fullMapCtx.fillStyle = '#111';
-            for(let b of colliders) { 
-                if (b.min && b.max) fullMapCtx.fillRect(b.min.x, b.min.z, b.max.x - b.min.x, b.max.z - b.min.z);
-            }
-
-            fullMapCtx.fillStyle = '#ff00ff';
-            fullMapCtx.fillRect(JAIL_POS.x - 5, JAIL_POS.z - 5, 10, 10);
-            
-            fullMapCtx.fillStyle = '#ffaa00';
-            for(let p of pickups) { 
-                if (p.mesh && p.mesh.position) { fullMapCtx.beginPath(); fullMapCtx.arc(p.mesh.position.x, p.mesh.position.z, 15, 0, Math.PI*2); fullMapCtx.fill(); } 
-            }
-
-            for(let n of npcs) { 
-                if(!n.userData.dead && n.position) { 
-                    fullMapCtx.fillStyle = n.userData.isCop ? '#ff00ff' : (n.userData.isGang ? '#f00' : '#0f0');
-                    fullMapCtx.beginPath(); fullMapCtx.arc(n.position.x, n.position.z, 8, 0, Math.PI*2); fullMapCtx.fill(); 
-                } 
-            }
-            
-            fullMapCtx.fillStyle = '#0ff';
-            for(let v of cars) { 
-                if (v.position) {
-                    fullMapCtx.save(); fullMapCtx.translate(v.position.x, v.position.z); fullMapCtx.rotate(-v.rotation.y); 
-                    fullMapCtx.fillRect(-6, -10, 12, 20); fullMapCtx.restore(); 
-                }
-            }
-            
-            const cPos = new THREE.Vector3(); camera.getWorldPosition(cPos);
-            const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
-            
-            fullMapCtx.save(); fullMapCtx.translate(cPos.x, cPos.z); fullMapCtx.rotate(Math.atan2(dir.x, dir.z));
-            
-            fullMapCtx.fillStyle = '#fff'; fullMapCtx.strokeStyle = '#000'; fullMapCtx.lineWidth = 2;
-            fullMapCtx.beginPath(); fullMapCtx.moveTo(0, -20); fullMapCtx.lineTo(15, 20); fullMapCtx.lineTo(0, 10); fullMapCtx.lineTo(-15, 20); fullMapCtx.closePath();
-            fullMapCtx.fill(); fullMapCtx.stroke();
-            
-            fullMapCtx.restore(); fullMapCtx.restore();
-        }
-
-    </script>
+    <script type="module" src="./src/main.js"></script>
 </body>
 </html>
