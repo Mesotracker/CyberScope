@@ -53,8 +53,6 @@ function getNpcGeometry() {
         { geo: new THREE.CylinderGeometry(0.018, 0.018, 0.55, 4), x: 0.15, y: 2.06, z: -0.3 }
     ]);
 
-    NPC_GEO.visor = new THREE.BoxGeometry(0.36, 0.1, 0.07);
-
     NPC_GEO.trim = mergeAt([
         { geo: new THREE.BoxGeometry(0.46, 0.032, 0.03), y: 1.53, z: 0.215 },
         { geo: new THREE.BoxGeometry(0.34, 0.03, 0.03), y: 1.29, z: 0.185 },
@@ -62,10 +60,12 @@ function getNpcGeometry() {
         { geo: new THREE.BoxGeometry(0.04, 0.34, 0.03), x: 0.3, y: 1.42, z: 0.2 },
         { geo: new THREE.BoxGeometry(0.2, 0.04, 0.3), x: -0.4, y: 1.66 },
         { geo: new THREE.BoxGeometry(0.2, 0.04, 0.3), x: 0.4, y: 1.66 },
-        { geo: new THREE.BoxGeometry(0.32, 0.03, 0.03), y: 1.4, z: -0.37 }
+        { geo: new THREE.BoxGeometry(0.32, 0.03, 0.03), y: 1.4, z: -0.37 },
+        // Visor and antenna tip share the trim material, so fold them in and
+        // save two draw calls per pedestrian.
+        { geo: new THREE.BoxGeometry(0.36, 0.1, 0.07), y: 1.88, z: 0.2 },
+        { geo: new THREE.SphereGeometry(0.055, 6, 4), x: 0.15, y: 2.34, z: -0.3 }
     ]);
-
-    NPC_GEO.tip = new THREE.SphereGeometry(0.055, 6, 4);
 
     NPC_GEO.arm = mergeAt([
         { geo: new THREE.BoxGeometry(0.15, 0.42, 0.16), y: -0.2 },
@@ -115,10 +115,6 @@ function createNPC(isCop, isGang) {
     const trimMesh = new THREE.Mesh(geo.trim, trim);
     group.add(trimMesh);
 
-    const visor = new THREE.Mesh(geo.visor, trim);
-    visor.position.set(0, 1.88, 0.2);
-    group.add(visor);
-
     const armL = new THREE.Group();
     armL.position.set(-0.42, 1.63, 0);
     const armLMesh = new THREE.Mesh(geo.arm, outfit);
@@ -146,10 +142,6 @@ function createNPC(isCop, isGang) {
     legRMesh.castShadow = true;
     legR.add(legRMesh);
     group.add(legR);
-
-    const tip = new THREE.Mesh(geo.tip, trim);
-    tip.position.set(0.15, 2.34, -0.3);
-    group.add(tip);
 
     if (isCop || isGang) {
         const weapon = new THREE.Mesh(isCop ? geo.rifle : geo.pistol, getDarkMetalMaterial());
@@ -348,10 +340,13 @@ export function spawnNPCs() {
     for (let i = 0; i < CONFIG.npcCount; i++) spawnSingleNPC(false);
     for (let i = 0; i < CONFIG.copCount; i++) spawnSingleNPC(true);
 
-    // Stage a couple of civilians near the spawn plaza so the detailed models
-    // are visible immediately instead of only somewhere in the sprawl.
-    spawnSingleNPC(false, { x: -5, z: -8 }, false);
-    spawnSingleNPC(false, { x: 8, z: -12 }, false);
+    // Stage civilians around the spawn plaza so the street feels busy the
+    // moment the player arrives, not only somewhere out in the sprawl.
+    const plazaCrowd = [
+        [-5, -8], [8, -12], [-19, -22], [20, -25],
+        [-24, 15], [26, 21], [-35, -3], [36, 9], [4, 35], [-7, -37]
+    ];
+    for (const [x, z] of plazaCrowd) spawnSingleNPC(false, { x, z }, false);
 
     ui.updateHUD();
 }

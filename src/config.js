@@ -19,7 +19,13 @@ export const IS_MOBILE = detectMobile();
 
 export const QUALITY = {
     isMobile: IS_MOBILE,
+    // Render scale, in device pixels per CSS pixel.
     pixelRatio: IS_MOBILE ? 1 : 1.5,
+    // Only the mobile profile is allowed to trade resolution for frame rate.
+    // Desktop always renders at its full high-quality scale.
+    adaptive: IS_MOBILE,
+    maxPixelRatio: IS_MOBILE ? 1 : 1.5,
+    minPixelRatio: IS_MOBILE ? 0.68 : 1.5,
     antialias: !IS_MOBILE,
     shadows: !IS_MOBILE,
     rainColumns: IS_MOBILE ? 420 : 1200,
@@ -28,6 +34,9 @@ export const QUALITY = {
     bloomStrength: IS_MOBILE ? 0.55 : 0.8,
     bloomRadius: IS_MOBILE ? 0.5 : 0.62,
     bloomThreshold: IS_MOBILE ? 0.85 : 0.72,
+    // Bloom is a soft blur, so mobile can compute it at half resolution.
+    bloomScale: IS_MOBILE ? 0.5 : 1,
+    anisotropy: IS_MOBILE ? 2 : 8,
     glitchIntensity: IS_MOBILE ? 0.55 : 1
 };
 
@@ -39,7 +48,7 @@ export const CONFIG = {
     citySize: 2000,
     blockSize: 100,
     roadWidth: 40,
-    npcCount: IS_MOBILE ? 20 : 40,
+    npcCount: IS_MOBILE ? 26 : 60,
     carCount: IS_MOBILE ? 8 : 18,
     pickupCount: IS_MOBILE ? 8 : 15,
     heartCount: IS_MOBILE ? 6 : 10,

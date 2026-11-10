@@ -86,13 +86,13 @@ export function addScore(points, worldPosition) {
     if (!worldPosition || !game.camera) return;
 
     const projected = worldPosition.clone().project(game.camera);
-    if (projected.z > 1) return;
+    if (projected.z > 1 || Math.abs(projected.x) > 1.05 || Math.abs(projected.y) > 1.15) return;
 
     const div = document.createElement('div');
     div.className = 'floating-score';
     div.textContent = `+${points}`;
-    div.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
-    div.style.top = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
+    div.style.left = `${(projected.x * 0.5 + 0.5) * viewportWidth()}px`;
+    div.style.top = `${(-projected.y * 0.5 + 0.5) * viewportHeight()}px`;
     document.body.appendChild(div);
     setTimeout(() => div.remove(), 1000);
 }
@@ -118,6 +118,15 @@ export function createHealthBar() {
 const tmpWorld = new THREE.Vector3();
 const tmpCamera = new THREE.Vector3();
 
+// Projection uses the same fitted size as the renderer, not the layout window.
+function viewportWidth() {
+    return game.viewport ? game.viewport.width : window.innerWidth;
+}
+
+function viewportHeight() {
+    return game.viewport ? game.viewport.height : window.innerHeight;
+}
+
 export function updateEntityHealthBars() {
     if (!game.camera) return;
     game.camera.getWorldPosition(tmpCamera);
@@ -137,14 +146,16 @@ export function updateEntityHealthBars() {
         tmpWorld.y += 3.5;
         const projected = tmpWorld.project(game.camera);
 
-        if (projected.z > 1 || distance > 220) {
+        // Off-screen entities would stretch the page, so hide their bars.
+        if (projected.z > 1 || distance > 220 ||
+            Math.abs(projected.x) > 1.05 || Math.abs(projected.y) > 1.15) {
             bar.style.display = 'none';
             continue;
         }
 
         bar.style.display = 'block';
-        bar.style.left = `${(projected.x * 0.5 + 0.5) * window.innerWidth}px`;
-        bar.style.top = `${(-projected.y * 0.5 + 0.5) * window.innerHeight}px`;
+        bar.style.left = `${(projected.x * 0.5 + 0.5) * viewportWidth()}px`;
+        bar.style.top = `${(-projected.y * 0.5 + 0.5) * viewportHeight()}px`;
 
         const fill = bar.firstChild;
         if (fill) {

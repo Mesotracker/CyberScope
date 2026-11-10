@@ -412,7 +412,8 @@ export function fireWeapon() {
 
             const npc = findAncestor(hit.object, 'npc');
             if (npc) {
-                damageNPC(npc, weapon.damage);
+                // The shot direction carries the body into the ragdoll.
+                damageNPC(npc, weapon.damage, game.raycaster.ray.direction.clone().multiplyScalar(2.8));
                 createImpact(hit.point, weapon.color);
                 return;
             }
@@ -702,7 +703,9 @@ function updateDriving(dt) {
     if (Math.abs(car.userData.velocity) > 8) {
         for (const npc of [...game.npcs]) {
             if (!npc.userData.dead && npc.position && npc.position.distanceTo(car.position) < 4.5) {
-                damageNPC(npc, 100);
+                const carDir = new THREE.Vector3();
+                car.getWorldDirection(carDir);
+                damageNPC(npc, 100, carDir.multiplyScalar(7));
             }
         }
     }

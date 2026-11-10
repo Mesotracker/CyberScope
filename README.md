@@ -42,9 +42,16 @@ On a phone or tablet the game switches to a touch profile when held in landscape
 - A rotate prompt blocks play in portrait, and the start screen uses a touch briefing.
 
 The mobile profile lowers the pixel ratio, disables shadow maps, halves reflection
-resolution, thins the matrix rain / traffic / crowds, and reduces bloom. Append
-`?mobile=1` to force it on a desktop (useful for testing) or `?mobile=0` to force
+resolution, thins the matrix rain / traffic / crowds, computes bloom at reduced
+resolution and refreshes the planar street reflection every other frame. If a
+touch device still cannot hold a smooth frame rate, render resolution scales
+down automatically (to 0.68x at the floor) and recovers when there is headroom.
+Desktop keeps its fixed high-quality 1.5x render scale. Append `?mobile=1` to
+force the touch profile on a desktop (useful for testing) or `?mobile=0` to force
 the desktop profile on a hybrid device.
+
+The canvas refits the visible viewport on window resize, device rotation, browser
+chrome changes and fullscreen, including mobile `visualViewport` updates.
 
 ## Module map
 
@@ -58,8 +65,8 @@ the desktop profile on a hybrid device.
 | `src/entities.js` | Detailed NPCs, vehicles, pickups, AI and per-frame updates |
 | `src/player.js` | Pointer-lock controller, weapon rig, firing, vehicles, map |
 | `src/mobile.js` | Touch joystick, swipe-look, tap-fire and mobile start flow |
-| `src/combat.js` | Damage, explosions, arrests, deaths, corpses and score |
-| `src/effects.js` | Explosion / fire / spark visuals |
+| `src/combat.js` | Damage, explosions, arrests, ragdoll deaths and score |
+| `src/effects.js` | Explosion flash, fireball, shockwave, smoke, embers and scorch decals |
 | `src/ui.js` | HUD, health bars, messages, minimap and full map |
 | `src/postfx.js` | Bloom, chromatic glitch, grain, scanlines, output pass |
 | `src/audio.js` | Lazy WebAudio weapon and engine synthesis |
@@ -79,6 +86,24 @@ All concrete, window, signage, glyph and advertising textures are generated on
 
 The matrix rain is a single `Points` cloud driven by a custom glyph-atlas shader;
 the sky dome adds drifting smog bands and occasional row glitches.
+
+## Combat sandbox
+
+Every explosion is a stack of layered effects: a white-hot sprite flash, an expanding
+fireball and core, a fast ground shockwave ring, drifting smoke puffs, an ember spray
+and a scorch decal that slowly fades off the wet street. A shared point light pulses
+with the flash, and nearby bodies already on the floor are thrown again.
+
+Dead NPCs become ragdolls. The torso and limbs detach as rigid pieces, inherit the
+shot or blast impulse, tumble under gravity, bounce once off the ground and settle
+before sinking away. The number of live ragdoll pieces is capped so corpses cannot
+drain the frame rate.
+
+The city is zoned rather than uniform: the outskirts are filled with low modern
+houses (stacked volumes, cantilevered slabs, warm window ribbons) and gabled row
+houses, the middle ring holds the mid-rise towers, and sparse supertall skyscrapers
+reach 230-450 m with setback tiers, neon corner strips, lit crowns and antenna
+beacons.
 
 ## Tuning
 

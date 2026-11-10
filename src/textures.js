@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONFIG } from './config.js';
+import { CONFIG, QUALITY } from './config.js';
 
 // ---------------------------------------------------------------------------
 // Procedural texture library. Everything is generated on canvases at boot so
@@ -30,7 +30,7 @@ function toTexture(canvas, { srgb = true, repeat = true, nearest = false } = {})
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     if (repeat) texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.anisotropy = 8;
+    texture.anisotropy = QUALITY.anisotropy;
     if (nearest) {
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestMipmapLinearFilter;
@@ -662,6 +662,40 @@ export function getPlazaDecalTexture() {
 
     const texture = toTexture(canvas, { repeat: false });
     textureCache.set('plazaDecal', texture);
+    return texture;
+}
+
+export function getScorchTexture() {
+    if (textureCache.has('scorch')) return textureCache.get('scorch');
+    const size = 256;
+    const canvas = createCanvas(size);
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0.94)');
+    gradient.addColorStop(0.45, 'rgba(0, 0, 0, 0.66)');
+    gradient.addColorStop(0.78, 'rgba(0, 0, 0, 0.2)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    // Soot blotches so the mark reads as burnt ground, not a clean circle.
+    for (let i = 0; i < 120; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.pow(Math.random(), 0.6) * size * 0.46;
+        ctx.fillStyle = `rgba(0, 0, 0, ${0.12 + Math.random() * 0.38})`;
+        ctx.beginPath();
+        ctx.arc(
+            size / 2 + Math.cos(angle) * radius,
+            size / 2 + Math.sin(angle) * radius,
+            1 + Math.random() * 7,
+            0,
+            Math.PI * 2
+        );
+        ctx.fill();
+    }
+
+    const texture = toTexture(canvas, { repeat: false });
+    textureCache.set('scorch', texture);
     return texture;
 }
 

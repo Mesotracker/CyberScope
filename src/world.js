@@ -273,6 +273,19 @@ function createGround() {
     ground.material.uniforms.uFogDensity.value = CONFIG.fogDensity;
     ground.material.uniforms.uBlockSize.value = CONFIG.blockSize;
 
+    // The planar reflection re-renders the whole scene. On mobile half the
+    // frame rate is invisible under the ripples, and it saves a full geometry
+    // submission every other frame on low-end GPUs.
+    if (QUALITY.isMobile) {
+        const renderReflection = ground.onBeforeRender;
+        let frame = 0;
+        ground.onBeforeRender = function (...args) {
+            frame++;
+            if (frame % 2 === 0) return;
+            renderReflection.apply(this, args);
+        };
+    }
+
     game.scene.add(ground);
     game.ground = ground;
 }
@@ -368,6 +381,194 @@ function createCityscape() {
     const beacons = [];
     const signs = getSignPool();
     const blockCenters = [];
+    const warmGlow = [];
+    const coolGlow = [];
+
+    const box = (w, h, d, x, y, z) => {
+        const geometry = new THREE.BoxGeometry(w, h, d);
+        geometry.translate(x, y, z);
+        return geometry;
+    };
+
+    const addFacade = (bucket, w, h, d, x, y, z, uvW, uvH) => {
+        const geometry = new THREE.BoxGeometry(w, h, d);
+        scaleUV(geometry, Math.max(1, uvW), Math.max(1, uvH));
+        geometry.translate(x, y, z);
+        bucket.push(geometry);
+    };
+
+    const addRoof = (w, h, d, x, y, z) => {
+        roofGeometries.push(box(w, h, d, x, y, z));
+    };
+
+    const addBeacon = (x, y, z) => {
+        const beacon = new THREE.SphereGeometry(0.75, 6, 4);
+        beacon.translate(x, y, z);
+        beacons.push({ geometry: beacon, color: Math.random() > 0.35 ? CONFIG.neon.red : CONFIG.neon.cyan });
+    };
+
+    function buildHouse(cx, cz, footprint) {
+        const rowHouse = Math.random() < 0.45;
+        const width = footprint * (0.32 + Math.random() * 0.2);
+        const depth = footprint * (0.28 + Math.random() * 0.18);
+        const floorH = 3.3;
+        const floors = rowHouse ? 2 + (Math.random() < 0.4 ? 1 : 0) : 1 + Math.floor(Math.random() * 2);
+        const wallH = floors * floorH;
+        const base = 0.14;
+        const bucket = buckets[3 + Math.floor(Math.random() * 3)];
+
+        if (rowHouse) {
+            addFacade(bucket, width, wallH, depth, cx, base + wallH / 2, cz,
+                Math.max(1, width / 9), Math.max(1, wallH / 7));
+
+            // Gabled roof: a three-sided prism flattened into a shallow pitch.
+            const roofRadius = width * 0.52;
+            const roof = new THREE.CylinderGeometry(roofRadius, roofRadius, depth * 0.98, 3, 1);
+            roof.rotateX(Math.PI / 2);
+            roof.rotateZ(Math.PI / 2);
+            roof.scale(1, 0.24, 1);
+            roof.translate(cx, base + wallH + roofRadius * 0.2, cz);
+            roofGeometries.push(roof);
+
+            for (let floor = 0; floor < floors; floor++) {
+                const y = base + 1.55 + floor * floorH;
+                warmGlow.push(box(width * 0.6, 1.15, 0.12, cx - width * 0.1, y, cz + depth / 2 + 0.02));
+                warmGlow.push(box(width * 0.3, 1.15, 0.12, cx + width * 0.22, y, cz - depth / 2 - 0.02));
+            }
+        } else {
+            // Modern house: stacked volumes with cantilevered floor slabs.
+            const lowerH = floorH + 0.7;
+            addFacade(bucket, width, lowerH, depth, cx, base + lowerH / 2, cz,
+                Math.max(1, width / 10), Math.max(1, lowerH / 7));
+
+            const upperW = width * (0.7 + Math.random() * 0.2);
+            const upperD = depth * (0.78 + Math.random() * 0.2);
+            const upperH = Math.max(1.6, wallH - lowerH);
+            const shift = (Math.random() < 0.5 ? -1 : 1) * width * 0.12;
+            addFacade(bucket, upperW, upperH, upperD, cx + shift, base + lowerH + upperH / 2, cz,
+                Math.max(1, upperW / 10), Math.max(1, upperH / 7));
+
+            addRoof(width + 1.8, 0.32, depth + 1.8, cx, base + lowerH, cz);
+            addRoof(upperW + 1.2, 0.3, upperD + 1.2, cx + shift, base + wallH, cz);
+
+            warmGlow.push(box(width * 0.72, 1.2, 0.12, cx, base + 1.9, cz + depth / 2 + 0.02));
+            warmGlow.push(box(width * 0.72, 1.2, 0.12, cx, base + 1.9, cz - depth / 2 - 0.02));
+            if (upperH > 2.4) {
+                warmGlow.push(box(upperW * 0.7, 1.05, 0.12, cx + shift, base + lowerH + upperH * 0.55, cz + upperD / 2 + 0.02));
+            }
+
+            // Rooftop garden edge.
+            addRoof(upperW * 0.9, 0.45, 0.28, cx + shift, base + wallH + 0.22, cz + upperD / 2 - 0.14);
+        }
+
+        addCollider(new THREE.Box3(
+            new THREE.Vector3(cx - width / 2, 0, cz - depth / 2),
+            new THREE.Vector3(cx + width / 2, wallH + (rowHouse ? 4 : 2), cz + depth / 2)
+        ));
+    }
+
+    function buildSkyscraper(cx, cz, footprint, height) {
+        const bucket = buckets[Math.random() < 0.5 ? 0 : 4];
+        let width = footprint * (0.5 + Math.random() * 0.16);
+        let y = 0.14;
+        let remaining = height;
+        const tiers = 3 + Math.floor(Math.random() * 3);
+
+        for (let tier = 0; tier < tiers; tier++) {
+            const last = tier === tiers - 1;
+            const tierHeight = last ? remaining : Math.max(12, remaining * (0.28 + Math.random() * 0.1));
+            addFacade(bucket, width, tierHeight, width, cx, y + tierHeight / 2, cz,
+                Math.max(1, width / 22), Math.max(1, tierHeight / 22));
+            y += tierHeight;
+            remaining -= tierHeight;
+            width *= 0.85;
+            if (remaining < 6) break;
+        }
+
+        // Glowing crown band around the top tier.
+        coolGlow.push(box(width * 1.14, 1.6, width * 1.14, cx, y - 1.1, cz));
+
+        // Neon corner strips running up the lower shaft.
+        const stripHeight = Math.min(70, y * 0.42);
+        const corner = footprint * 0.26;
+        for (const sx of [-1, 1]) {
+            for (const sz of [-1, 1]) {
+                coolGlow.push(box(0.55, stripHeight, 0.55, cx + sx * corner, 0.14 + stripHeight / 2, cz + sz * corner));
+            }
+        }
+
+        const mastHeight = 18 + Math.random() * 32;
+        addRoof(0.55, mastHeight, 0.55, cx, y + mastHeight / 2, cz);
+        addBeacon(cx, y + mastHeight + 0.6, cz);
+
+        addCollider(new THREE.Box3(
+            new THREE.Vector3(cx - footprint / 2, 0, cz - footprint / 2),
+            new THREE.Vector3(cx + footprint / 2, y, cz + footprint / 2)
+        ));
+    }
+
+    function buildTower(cx, cz, footprint, height, variant) {
+        const bucket = buckets[variant];
+        let width = footprint * (0.72 + Math.random() * 0.22);
+        let y = 0.14;
+        let segments = 0;
+
+        while (y < height && segments < 14) {
+            const segmentHeight = Math.min(8 + Math.random() * 24, height - y);
+            if (segmentHeight < 1) break;
+            addFacade(bucket, width, segmentHeight, width, cx, y + segmentHeight / 2, cz,
+                Math.max(1, width / 26), Math.max(1, segmentHeight / 26));
+            y += segmentHeight;
+            width = Math.max(footprint * 0.42, width * (0.85 + Math.random() * 0.09));
+            segments++;
+        }
+
+        // Rooftop plant and antenna masts.
+        const roofUnitCount = 1 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < roofUnitCount; i++) {
+            const unitW = 3 + Math.random() * 6;
+            const unitH = 1 + Math.random() * 2.5;
+            addRoof(unitW, unitH, unitW,
+                cx + (Math.random() - 0.5) * width * 0.5,
+                y + unitH / 2,
+                cz + (Math.random() - 0.5) * width * 0.5);
+        }
+
+        if (Math.random() < 0.6) {
+            const mastHeight = 8 + Math.random() * 34;
+            addRoof(0.44, mastHeight, 0.44, cx, y + mastHeight / 2, cz);
+            addBeacon(cx, y + mastHeight + 0.6, cz);
+        }
+
+        addCollider(new THREE.Box3(
+            new THREE.Vector3(cx - footprint / 2, 0, cz - footprint / 2),
+            new THREE.Vector3(cx + footprint / 2, y, cz + footprint / 2)
+        ));
+
+        return y;
+    }
+
+    function buildLowrise(cx, cz, footprint) {
+        const bucket = buckets[Math.random() < 0.5 ? 3 : 5];
+        const width = footprint * (0.7 + Math.random() * 0.2);
+        const depth = footprint * (0.6 + Math.random() * 0.25);
+        const height = 7 + Math.random() * 12;
+        const base = 0.14;
+
+        addFacade(bucket, width, height, depth, cx, base + height / 2, cz,
+            Math.max(1, width / 18), Math.max(1, height / 12));
+        coolGlow.push(box(width * 0.82, 0.7, 0.14, cx, base + height * 0.72, cz + depth / 2 + 0.08));
+
+        if (Math.random() < 0.5) {
+            addRoof(width * 0.9, 0.8, 0.5, cx, base + height + 0.4, cz + depth / 2 - 0.3);
+            addRoof(3.5, 2.2, 3.5, cx + width * 0.24, base + height + 1.1, cz - depth * 0.2);
+        }
+
+        addCollider(new THREE.Box3(
+            new THREE.Vector3(cx - width / 2, 0, cz - depth / 2),
+            new THREE.Vector3(cx + width / 2, height + 1, cz + depth / 2)
+        ));
+    }
 
     for (let x = -CONFIG.citySize / 2; x < CONFIG.citySize / 2; x += CONFIG.blockSize) {
         for (let z = -CONFIG.citySize / 2; z < CONFIG.citySize / 2; z += CONFIG.blockSize) {
@@ -379,63 +580,39 @@ function createCityscape() {
             if (Math.hypot(cx - JAIL_POS.x, cz - JAIL_POS.z) < 55) continue;
 
             const footprint = CONFIG.blockSize - CONFIG.roadWidth;
+            const distance = Math.hypot(cx, cz);
+            const roll = Math.random();
+
+            // District mix: low modern houses on the outskirts, mid-rise
+            // blocks through the middle, and sparse supertall towers.
+            let kind = 'tower';
+            if (distance > 260 && roll < 0.08) kind = 'supertall';
+            else if (distance > 420 && roll < 0.62) kind = 'house';
+            else if (distance > 180 && roll < 0.44) kind = 'house';
+            else if (roll > 0.9) kind = 'lowrise';
+
+            if (kind === 'house') {
+                buildHouse(cx, cz, footprint);
+                continue;
+            }
+
+            if (kind === 'lowrise') {
+                buildLowrise(cx, cz, footprint);
+                continue;
+            }
+
             const widthBase = footprint * (0.72 + Math.random() * 0.22);
-            const height = 26 + Math.pow(Math.random(), 1.7) * 155;
-            const variant = Math.floor(Math.random() * facadeMaterials.length);
+            let finalHeight;
 
-            let y = 0.14;
-            let width = widthBase;
-            let segments = 0;
-
-            while (y < height && segments < 14) {
-                const segmentHeight = Math.min(8 + Math.random() * 24, height - y);
-                if (segmentHeight < 1) break;
-
-                const geometry = new THREE.BoxGeometry(width, segmentHeight, width);
-                scaleUV(geometry, Math.max(1, width / 26), Math.max(1, segmentHeight / 26));
-                geometry.translate(cx, y + segmentHeight / 2, cz);
-                buckets[variant].push(geometry);
-
-                y += segmentHeight;
-                width = Math.max(footprint * 0.42, width * (0.85 + Math.random() * 0.09));
-                segments++;
+            if (kind === 'supertall') {
+                finalHeight = 230 + Math.pow(Math.random(), 0.75) * 220;
+                buildSkyscraper(cx, cz, footprint, finalHeight);
+            } else {
+                const height = 22 + Math.pow(Math.random(), 1.7) * 132;
+                finalHeight = buildTower(cx, cz, footprint, height, Math.floor(Math.random() * facadeMaterials.length));
             }
 
-            const finalHeight = y;
-
-            // Rooftop plant and antenna masts.
-            const roofUnitCount = 1 + Math.floor(Math.random() * 3);
-            for (let i = 0; i < roofUnitCount; i++) {
-                const uw = 3 + Math.random() * 6;
-                const uh = 1 + Math.random() * 2.5;
-                const unit = new THREE.BoxGeometry(uw, uh, uw);
-                unit.translate(
-                    cx + (Math.random() - 0.5) * width * 0.5,
-                    finalHeight + uh / 2,
-                    cz + (Math.random() - 0.5) * width * 0.5
-                );
-                roofGeometries.push(unit);
-            }
-
-            if (Math.random() < 0.6) {
-                const mastHeight = 8 + Math.random() * 34;
-                const mast = new THREE.CylinderGeometry(0.22, 0.6, mastHeight, 5);
-                mast.translate(cx, finalHeight + mastHeight / 2, cz);
-                roofGeometries.push(mast);
-
-                const beacon = new THREE.SphereGeometry(0.75, 6, 4);
-                beacon.translate(cx, finalHeight + mastHeight + 0.6, cz);
-                beacons.push({ geometry: beacon, color: Math.random() > 0.35 ? CONFIG.neon.red : CONFIG.neon.cyan });
-            }
-
-            // Collision footprint (full block, all floors).
-            const half = footprint / 2;
-            addCollider(new THREE.Box3(
-                new THREE.Vector3(cx - half, 0, cz - half),
-                new THREE.Vector3(cx + half, finalHeight, cz + half)
-            ));
-
-            // Neon blade signs on random facades.
+            // Neon blade signs on random tower facades.
             if (Math.random() < 0.42) {
                 const sign = signs[Math.floor(Math.random() * signs.length)];
                 const signWidth = 9 + Math.random() * 12;
@@ -473,6 +650,21 @@ function createCityscape() {
             roofMesh.castShadow = true;
             roofMesh.receiveShadow = true;
             game.scene.add(roofMesh);
+        }
+    }
+
+    // Warm ribbons light the houses; cold neon marks the tower crowns.
+    if (warmGlow.length) {
+        const mergedWarm = mergeGeometries(warmGlow, false);
+        if (mergedWarm) {
+            game.scene.add(new THREE.Mesh(mergedWarm, glowMaterial(0xffc37a, 1.7)));
+        }
+    }
+
+    if (coolGlow.length) {
+        const mergedCool = mergeGeometries(coolGlow, false);
+        if (mergedCool) {
+            game.scene.add(new THREE.Mesh(mergedCool, glowMaterial(CONFIG.neon.cyan, 2.2)));
         }
     }
 
@@ -627,7 +819,7 @@ function createMatrixRain() {
     rainUniforms = {
         uTime: { value: 0 },
         uAtlas: { value: getGlyphTexture() },
-        uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 1.5) },
+        uPixelRatio: { value: game.renderer ? game.renderer.getPixelRatio() : QUALITY.pixelRatio },
         uColorA: { value: new THREE.Color(0x2bff9e) },
         uColorB: { value: new THREE.Color(0x27e7ff) },
         uHeight: { value: 720 }
@@ -944,7 +1136,7 @@ export function updateWorld(time, dt) {
     if (skyUniforms) skyUniforms.uTime.value = time;
     if (rainUniforms) {
         rainUniforms.uTime.value = time;
-        rainUniforms.uPixelRatio.value = Math.min(window.devicePixelRatio || 1, 1.5);
+        rainUniforms.uPixelRatio.value = game.renderer ? game.renderer.getPixelRatio() : QUALITY.pixelRatio;
     }
     if (ground && ground.material && ground.material.uniforms) {
         ground.material.uniforms.uTime.value = time;

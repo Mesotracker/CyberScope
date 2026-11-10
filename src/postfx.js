@@ -66,7 +66,10 @@ export function createComposer(renderer, scene, camera) {
     composer.addPass(new RenderPass(scene, camera));
 
     const bloom = new UnrealBloomPass(
-        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        new THREE.Vector2(
+            Math.max(1, Math.round(window.innerWidth * QUALITY.bloomScale)),
+            Math.max(1, Math.round(window.innerHeight * QUALITY.bloomScale))
+        ),
         QUALITY.bloomStrength,
         QUALITY.bloomRadius,
         QUALITY.bloomThreshold
@@ -80,21 +83,40 @@ export function createComposer(renderer, scene, camera) {
 
     composer.addPass(new OutputPass());
 
+    // Cached so resizing and per-frame updates do not have to scan the pass list.
+    // EffectComposer r160 has no getPixelRatio(), so track it alongside the composer.
+    composer.bloom = bloom;
+    composer.glitch = glitch;
+    composer.pixelRatio = QUALITY.pixelRatio;
+
     return composer;
 }
 
 export function updateComposer(composer, time) {
-    const glitch = composer.passes.find(pass => pass.uniforms && pass.uniforms.uTime);
-    if (glitch) glitch.uniforms.uTime.value = time;
+    if (composer.glitch) composer.glitch.uniforms.uTime.value = time;
 }
 
-export function resizeComposer(composer, width, height) {
+export function resizeComposer(composer, width, height, pixelRatio) {
     if (!composer) return;
+
+    if (pixelRatio && Math.abs((composer.pixelRatio || 1) - pixelRatio) > 0.001) {
+        composer.setPixelRatio(pixelRatio);
+        composer.pixelRatio = pixelRatio;
+    }
     composer.setSize(width, height);
+
+    // EffectComposer sizes every pass at full resolution; bloom does not need it.
+    const ratio = composer.pixelRatio || 1;
+    if (composer.bloom && QUALITY.bloomScale < 1) {
+        composer.bloom.setSize(
+            Math.max(1, Math.round(width * ratio * QUALITY.bloomScale)),
+            Math.max(1, Math.round(height * ratio * QUALITY.bloomScale))
+        );
+    }
+
     for (const pass of composer.passes) {
         if (pass.uniforms && pass.uniforms.uResolution) {
             pass.uniforms.uResolution.value.set(width, height);
         }
-        if (pass.setSize) pass.setSize(width, height);
     }
 }
